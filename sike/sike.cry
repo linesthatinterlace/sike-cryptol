@@ -1,0 +1,764 @@
+module sike where
+import keccak 
+
+//
+// This is a parameterised version of the reference implementation of SIKE. It does not employ any compression or effiency methods.
+//
+
+//
+// Parameters
+//
+
+parameter
+    type p  : # // p must be of the form 2^(e2)3^(e3) - 1
+    type constraint (fin p, p % 4 == 3, p>=7)
+    type e2 : #
+    type constraint (fin e2, e2 >=4, e2 % 8 == 0) // Need >=4 for type reasons - in practice it will be bigger than this!
+    
+    type e3 : #
+    type constraint (fin e3, e3 >=1) // Need >=1 for type reasons - in practice it will be bigger than this!
+    
+    type crypto_bytes : #
+    type constraint (fin crypto_bytes)
+
+    type msg_bytes : #
+    type constraint (fin msg_bytes)
+
+    startingCurve : MontgomeryCurve
+    
+    xQ20 : Integer
+    xQ21 : Integer
+    
+    yQ20 : Integer
+    yQ21 : Integer
+    
+    xP20 : Integer
+    xP21 : Integer
+    
+    yP20 : Integer
+    yP21 : Integer
+
+    /*
+    xR20 : Integer
+    xR21 : Integer
+    */
+    
+    xQ30 : Integer
+    xQ31 : Integer
+    
+    yQ30 : Integer
+    yQ31 : Integer
+    
+    xP30 : Integer
+    xP31 : Integer
+    
+    yP30 : Integer
+    yP31 : Integer
+    
+    /*
+        //These are used in compressed versions, but not the reference implementation.
+        xR30 : Integer
+        xR31 : Integer
+    */
+
+
+//
+// Functional programming operators.
+//
+
+(>>) : {a, b, c} (a -> b) -> (b -> c) -> a -> c
+(>>) f g = \x -> g (f x)
+infixr 100 >>
+
+($) : {a, b} (a -> b) -> a -> b
+($) f x = f x
+infixr 1 $
+
+//
+// Data and value types.
+//
+
+type Np = lg2 p /^ 8
+type Nsk2 = e2 /^ 8
+type Nsk3 = lg2 (3^^e3) / 8
+type MessageLength = msg_bytes*8
+type SymKeyLength = crypto_bytes*8
+
+type PublicKey = [3]Fp2
+type SecretKeyTwo   = [Nsk2][8]
+type SecretKeyThree = [Nsk3][8]
+
+// 
+// Data type conversions.
+// 
+
+ostoi : {mlen} (fin mlen) => [mlen][8] -> Integer
+ostoi = reverse >> join >> toInteger
+
+ostofp : [Np][8] -> Fp
+ostofp xs = if (a < 0) || (a > `p - 1)
+            then undefined
+            else fromInteger a
+                where a = ostoi xs
+
+ostofp2 : [2*Np][8] -> Fp2
+ostofp2 = split >> map ostofp
+
+ostopk : [6*Np][8] -> PublicKey
+ostopk = split >> map ostofp2
+
+itoos : {mlen} (fin mlen) => Integer -> [mlen][8]
+itoos = fromInteger >> split >> reverse
+
+fptoos : Fp -> [Np][8]
+fptoos = fromZ >> itoos
+
+fp2toos : Fp2 -> [2*Np][8]
+fp2toos = map fptoos >> join
+
+pktoos : PublicKey -> [6*Np][8]
+pktoos = map fp2toos >> join
+
+
+
+//
+// F_p
+//
+
+type Fp = Z p
+
+fpAdd : Fp -> Fp -> Fp
+fpAdd a b = a + b
+
+property fpAddCom a b = fpAdd a b == fpAdd b a
+
+fpAddL : {n} (fin n) => [n]Fp -> Fp
+fpAddL xs = ys ! 0
+    where ys = [zero] # [fpAdd x y | x <- xs | y <- ys ]
+
+fpAddInv : Fp -> Fp
+fpAddInv a = -a
+
+fpSubt : Fp -> Fp -> Fp
+fpSubt a b = fpAdd a (fpAddInv b)
+
+fpDoub : Fp -> Fp
+fpDoub a = fpAdd a a
+
+fpScale : {n} (fin n) => Fp -> [n] -> Fp
+fpScale a n = bs ! 0
+    where   bs = [zero] # [ if bit then fpAdd a (fpDoub b) else fpDoub b | b <- bs | bit <- n ]
+
+fpMult : Fp -> Fp -> Fp
+fpMult a b = a*b
+
+fpMultL : {n} (fin n) => [n]Fp -> Fp
+fpMultL xs = ys ! 0
+    where ys = [1] # [fpMult x y | x <- xs | y <- ys ]
+
+fpMultInv : Fp -> Fp
+fpMultInv a = if a == 0
+              then undefined
+              else a'
+                where   a' = fromInteger (eea (fromZ a) `p).x
+
+
+fpDiv : Fp -> Fp -> Fp
+fpDiv a b = fpMult a (fpMultInv b)
+
+fpSquare : Fp -> Fp
+fpSquare a = fpMult a a
+
+fpPow : {n} (fin n) => Fp -> [n] -> Fp
+fpPow a n = bs ! 0
+    where   bs = [1] # [ if bit then fpMult a (fpSquare b) else fpSquare b | b <- bs | bit <- n ]
+
+fpSqrt : Fp -> Fp
+fpSqrt a =  if fpQuadNonRes a then  undefined
+            else    if r % 2 == 0
+                    then r
+                    else -r
+            where   r   = fpPow a (1 + (`p - 3) / 4 : [width p])
+
+fpQuadNonRes : Fp -> Bit
+fpQuadNonRes a = jacobi (fromZ a) `p == -1
+    where jacobi m n =  if (n < 0) || (n % 2 == 0) 
+                        then undefined
+                        |  (eea m' n).d != 1 
+                        then 0
+                        |  m' % 2 == 0 
+                        then (j2n)^^e * (jacobi m'' n)
+                        |  m' == 1  
+                        then 1
+                        else quadrep * (jacobi n m')
+                        where   m' = m % n
+                                (e, m'')    = (val2 m', m' / 2^^e)
+                                j2n         =   if (res8 == 1) || (res8 == 7)
+                                                then 1
+                                                else -1
+                                res8        = n % 8
+                                quadrep     =   if (n % 4 == 3) && (m' % 4 == 3)
+                                                then -1
+                                                else 1
+                                            
+                                val2 x      =   if x == 0
+                                                then undefined
+                                                else    if x % 2 == 1
+                                                        then 0
+                                                        else 1 + val2 (x / 2)
+
+eea : Integer -> Integer -> {x: Integer, y: Integer, d: Integer}
+eea a b =   fixSign $ eea' a' b'
+            where   
+                    Astart = {x = 1, y = 0, d = a}
+                    Bstart = {x = 0, y = 1, d = b}
+                    (a', b') = if abs a >= abs b then (Bstart, Astart) else (Astart, Bstart)
+                    abs x = if x < 0 then -x else x
+                    eea' A B =  if B.d == 0
+                                then A
+                                else eea' Anew Bnew
+                                where   Anew = B
+                                        Bnew = {x = A.x - q*B.x, y = A.y - q*B.y, d = A.d - q*B.d}
+                                        q = A.d/B.d
+                    fixSign m = if m.d < 0 then -m else m
+
+
+                    
+// F_(p^2)
+
+type Fp2 = [2]Fp
+
+lift : Fp -> Fp2
+lift a = [a, zero]
+
+norm : Fp2 -> Fp
+norm a = fpAdd (fpMult a0 a0) (fpMult a1 a1)
+    where   [a0, a1]    = a
+
+fp2Add : Fp2 -> Fp2 -> Fp2
+fp2Add a b = [fpAdd a0 b0, fpAdd a1 b1]
+    where   [a0, a1]    = a
+            [b0, b1]    = b
+
+fp2AddL : {n} (fin n) => [n]Fp2 -> Fp2
+fp2AddL xs = ys ! 0
+    where ys = [zero] # [fp2Add x y | x <- xs | y <- ys ]
+
+fp2AddInv : Fp2 -> Fp2
+fp2AddInv a = [fpAddInv a0, fpAddInv a1]
+    where   [a0, a1]    = a
+
+fp2Subt : Fp2 -> Fp2 -> Fp2
+fp2Subt a b = fp2Add a (fp2AddInv b)
+
+fp2Doub : Fp2 -> Fp2
+fp2Doub a = fp2Add a a
+
+fp2Scale : {n} (fin n) => Fp2 -> [n] -> Fp2
+fp2Scale a n = bs ! 0
+    where   bs = [zero] # [ if bit then fp2Add a (fp2Doub b) else fp2Doub b | b <- bs | bit <- n ]
+
+fp2Mult : Fp2 -> Fp2 -> Fp2
+fp2Mult a b = [fpSubt (fpMult a0 b0) (fpMult a1 b1), fpAdd (fpMult a0 b1) (fpMult a1 b0)]
+    where   [a0, a1]    = a
+            [b0, b1]    = b
+
+fp2MultL : {n} (fin n) => [n]Fp2 -> Fp2
+fp2MultL xs = ys ! 0
+    where ys = [lift 1] # [fp2Mult x y | x <- xs | y <- ys ]
+
+fp2MultInv : Fp2 -> Fp2
+fp2MultInv a = if a == zero then undefined else [a0', a1']
+    where   [a0', a1']  = [fpMult a0 (fpMultInv absVal), fpMult (fpAddInv a1) (fpMultInv absVal)]
+            [a0, a1]    = a
+            absVal      = norm a
+
+fp2Div : Fp2 -> Fp2 -> Fp2
+fp2Div a b = fp2Mult a (fp2MultInv b)
+
+fp2Square : Fp2 -> Fp2
+fp2Square a = fp2Mult a a
+
+fp2Pow : {n} (fin n) => Fp2 -> [n] -> Fp2
+fp2Pow a n = bs ! 0
+    where   bs = [lift 1] # [ if bit then fp2Mult a (fp2Square b) else fp2Square b | b <- bs | bit <- n ]
+
+fp2Sqrt : Fp2 -> Fp2
+fp2Sqrt a = if  a1 == zero
+            then    if      fpQuadNonRes a0
+                    then    [zero, fpSqrt (fpAddInv a0)]
+                    else    [fpSqrt a0, zero]
+            else    if      (alpha % 2 != zero)
+                    then    fp2AddInv [alpha, beta]
+                    else    [alpha, beta]
+            where   [a0, a1]    = a
+                    [alpha, beta]   =   if fpQuadNonRes z
+                                        then [beta', fpAddInv alpha']
+                                        else [alpha', beta']
+                    z               =   fpDiv (fpAdd a0 (fpSqrt (norm a))) 2
+                    alpha'          =   fpMult z p34
+                    beta'           =   fpDiv (fpMult a1 p34) 2
+                    p34             =   fpPow z ((`p - 3) / 4 : [width p])
+
+fp2QuadNonRes : Fp2 -> Bit
+fp2QuadNonRes a = fpQuadNonRes (norm a)
+
+//
+// Elliptic Points and (Montgomery) curve data types.
+//
+
+type EllipticPoint = {affine: {x: Fp2, y: Fp2}, isAffine: Bit}
+
+mkAffine : Fp2 -> Fp2 -> EllipticPoint
+mkAffine x' y' = { affine = {x = x', y = y'}, isAffine = True }
+
+type MontgomeryCurve = { A: Fp2, B: Fp2}
+
+mkMC : Fp2 -> Fp2 -> MontgomeryCurve
+mkMC a b = if discrim == zero then undefined else {A = a, B = b}
+    where   discrim = fp2Mult b (fp2Subt (fp2Square a) (lift (fromInteger 4)))
+
+verifyPoint : MontgomeryCurve -> EllipticPoint -> Bit
+verifyPoint C P =  if ~P.isAffine
+            then True
+            else fp2MultL[C.B, yP, yP] == fp2AddL[fp2MultL[xP, xP, xP], fp2MultL[C.A, xP, xP], xP]
+                    where   xP = P.affine.x
+                            yP = P.affine.y
+                            
+
+
+//
+// Point and curve operations.
+//
+
+// Algorithm 25
+xDBL : MontgomeryCurve -> EllipticPoint -> EllipticPoint
+xDBL C P =      if ~P.isAffine
+                then zero
+                |  P == xNEGATE C P
+                then zero
+                else mkAffine x2P y2P
+                    where   xP = P.affine.x
+                            yP = P.affine.y
+                            x2P = fp2Subt (fp2MultL [C.B, lambda, lambda]) (fp2AddL [xP, xP, C.A])
+                            y2P = fp2Subt (fp2Mult lambda (fp2Subt xP x2P)) yP
+                            lambda = fp2Div lambda_top lambda_bottom
+                            lambda_top = fp2AddL [xPs, xPs, xPs, aXP, aXP, lift 1]
+                            xPs = fp2Square xP
+                            aXP = fp2Mult C.A xP
+                            lambda_bottom = fp2Add byP byP
+                            byP = fp2Mult C.B yP
+
+xDBL' : MontgomeryCurve -> EllipticPoint -> Fp2
+xDBL' C P =     xP//mkAffine x2P y2P
+                    where   xP = P.affine.x
+
+
+// Algorithm 26
+xDBLe : {n} (fin n) => [n] -> MontgomeryCurve -> EllipticPoint -> EllipticPoint
+xDBLe e C P = ys @ e
+                where ys = iterate (xDBL C) P
+
+
+xNEGATE : MontgomeryCurve -> EllipticPoint -> EllipticPoint
+xNEGATE C P =   if ~P.isAffine
+                then zero
+                else {affine = {x = xP, y = fp2AddInv yP}, isAffine = True}
+                    where   xP = P.affine.x
+                            yP = P.affine.y
+
+// Algorithm 27
+xADD : MontgomeryCurve -> EllipticPoint -> EllipticPoint -> EllipticPoint
+xADD C P Q =    if ~P.isAffine
+                then Q
+                |  ~Q.isAffine
+                then P
+                |  P == Q
+                then xDBL C P
+                |  P == (xNEGATE C Q)
+                then zero
+                else mkAffine xPpQ yPpQ
+                    where   xP = P.affine.x
+                            yP = P.affine.y
+                            xQ = Q.affine.x
+                            yQ = Q.affine.y
+                            xPpQ = fp2Subt (fp2MultL [C.B, lambda, lambda]) (fp2AddL [xP, xQ, C.A])
+                            yPpQ = fp2Subt (fp2Mult lambda (fp2Subt xP xPpQ)) yP
+                            lambda = fp2Div lambda_top lambda_bottom
+                            lambda_top = fp2Subt yQ yP
+                            lambda_bottom = fp2Subt xQ xP
+
+// Algorithm 28
+xTPL : MontgomeryCurve -> EllipticPoint -> EllipticPoint
+xTPL C P = xADD C P (xDBL C P)
+
+// Algorithm 29
+xTPLe : {n} (fin n) => [n] -> MontgomeryCurve -> EllipticPoint -> EllipticPoint
+xTPLe e C P  = ys @ e
+                where ys = iterate (xTPL C) P
+
+// Algorithm 30
+double_and_add : {n} (fin n) => MontgomeryCurve -> EllipticPoint -> [n] -> EllipticPoint
+double_and_add C P n = bs ! 0
+                        where bs = [zero] # [ if bit then xADD C P (xDBL C b) else xDBL C b | b <- bs | bit <- n ]
+
+// Algorithm 31
+j_inv : MontgomeryCurve ->  Fp2
+j_inv C = fp2Div numerator denominator
+            where   numerator = fp2Scale asm3c (256 : [9])
+                    asm3c = fp2Pow (fp2Subt asquare (lift 3)) (3 : [2])
+                    denominator = fp2Subt asquare (lift 4)
+                    asquare = fp2Square C.A
+
+
+//
+// Isogenies.
+//
+
+// Algorithm 32
+curve_2_iso : Fp2 -> MontgomeryCurve -> MontgomeryCurve
+curve_2_iso x2 C = {A = a', B = b'}
+                    where   a' = fp2Doub(fp2Subt (lift 1) (fp2Doub x2s))
+                            b' = fp2Mult x2 C.B
+                            x2s = fp2Square x2
+                            
+// a' = 2*(1-2*x2^2)
+// b' = x2*b
+               
+// Algorithm 33
+eval_2_iso : Fp2 -> EllipticPoint -> EllipticPoint
+eval_2_iso x2 Q = Q'
+    where   (xQ, yQ)        = (Q.affine.x, Q.affine.y)
+            xQx2            = fp2Mult xQ x2
+            xQxQx2          = fp2Mult xQx2 xQ
+            xQx2x2          = fp2Mult xQx2 x2
+            numeratorX      = fp2Subt xQxQx2 xQ
+            numeratorY      = fp2AddL [xQxQx2, m2xQx2x2, x2]
+            m2xQx2x2        = fp2AddInv $ fp2Doub xQx2x2
+            denominatorX    = fp2Subt xQ x2
+            denominatorY    = fp2Square denominatorX
+            xQ'             = fp2Div numeratorX denominatorX
+            yQ'             = fp2Div numeratorY denominatorY
+            Q'              = mkAffine xQ' yQ'
+
+// xQ':=(xQ^2*x2-xQ)/(xQ-x2);
+// yQ':=yQ*(xQ^2*x2-2*xQ*x2^2+x2)/(xQ-x2)^2;
+
+// Algorithm 34
+curve_4_iso : Fp2 -> MontgomeryCurve -> MontgomeryCurve
+curve_4_iso x4 C = {A = a', B = b'}
+            where   a' = fp2Subt (fp2Doub $ fp2Doub x4Fourth) (lift 2)
+                    b' = fp2MultL [minusHalf, fp2Add x4Cubed x4, C.B]
+                    x4Fourth = fp2Square $ fp2Square x4
+                    x4Cubed = fp2Mult x4 $ fp2Square x4
+                    minusHalf = fp2AddInv $ fp2MultInv $ lift 2
+
+// a':=4*x4^4-2;
+// b':== -(1/2)*(x4^3+x4)*b;
+
+// Algorithm 35
+eval_4_iso : Fp2 -> EllipticPoint -> EllipticPoint
+eval_4_iso x4 Q = Q'
+    where   (xQ, yQ)        = (Q.affine.x, Q.affine.y)
+            t1  = fp2Square xQ
+            t2  = fp2Square t1
+            t3  = fp2Square x4
+            t4  = fp2Mult t2 t3
+            t5  = fp2Add t2 t4
+            t6  = fp2Mult t1 t3
+            t7  = fp2Doub t6
+            t8  = fp2Doub t7
+            t9  = fp2Doub t8
+            t10 = fp2Add t7 t9
+            t11 = fp2Add t5 t10
+            t12 = fp2Square t10
+            t13 = fp2Mult t1 t12
+            t14 = fp2Doub t13
+            t15 = fp2Add t11 t14
+            t16 = fp2Mult t1 xQ
+            t17 = fp2Mult x4 t3
+            t18 = fp2Mult t16 t17
+            t19 = fp2Doub t18
+            t20 = fp2Doub t19
+            t21 = fp2Subt t15 t20
+            t22 = fp2Mult t16 x4 
+            t23 = fp2Doub t22
+            t24 = fp2Doub t22
+            t25 = fp2Subt t21 t24
+            t26 = fp2Mult xQ t17
+            t27 = fp2Doub t26
+            t28 = fp2Doub t27
+            t29 = fp2Subt t25 t28
+            t30 = fp2Add t29 t3
+            t31 = fp2Add t30 (lift 1)
+            t32 = fp2Mult xQ x4
+            t33 = fp2Subt t31 (lift 1)
+            t34 = fp2Doub t32
+            t35 = fp2Doub t34
+            t36 = fp2Subt t31 t35
+            t37 = fp2Mult t33 t36
+            t38 = fp2Mult t3 t37
+            t39 = fp2Mult yQ t37
+            t40 = fp2Doub t39
+            t41 = fp2AddInv t40
+            t42 = fp2Subt t34 t3
+            t43 = fp2Subt t42 (lift 1)
+            t44 = fp2Subt xQ x4
+            t45 = fp2Mult t44 t43
+            t46 = fp2Square t45
+            t47 = fp2Mult t46 t44
+            t48 = fp2MultInv t47
+            t49 = fp2Mult t41 t48
+            t50 = fp2Mult t45 t44
+            t51 = fp2MultInv t50
+            t52 = fp2Square t33
+            t53 = fp2Mult t51 t52
+            t54 = fp2Mult xQ t53
+            t55 = fp2Mult xQ t3
+            t56 = fp2Add t55 xQ
+            t57 = fp2Doub x4
+            t58 = fp2Subt t56 t57
+            t59 = fp2AddInv t58
+            t60 = fp2Mult t54 t59
+            xQ' = t60
+            yQ' = t49
+            Q'  = mkAffine xQ' yQ'
+
+// This implements, precisely, the algorithm in the specification, in a way that I have not (as of writing) done for the others.
+// xx:=x(-x*x4^2-x+2*x4)*C*C/(B*B*A);
+// yy:=y*x4^2*C*D/(B*B*B*A*A);
+
+// Algorithm 36
+curve_3_iso : Fp2 -> MontgomeryCurve -> MontgomeryCurve
+curve_3_iso x3 C = {A = a', B = b'}
+            where   a' = fp2Mult x3 $ fp2Add (fp2Mult C.A x3) (fp2Mult (lift 6) (fp2Subt (lift 1) x3Squared))
+                    b' = fp2Mult x3Squared C.B
+                    x3Cubed = fp2Mult x3 x3Squared
+                    x3Squared = fp2Square x3
+
+// a':=(a*x3-6*x3^2+6)*x3;
+// b':=b*x3^2;
+
+// Algorithm 37
+eval_3_iso : Fp2 -> EllipticPoint -> EllipticPoint
+eval_3_iso x3 Q = Q'
+    where   (xQ, yQ)        = (Q.affine.x, Q.affine.y)
+            xQTx3           = fp2Mult xQ x3
+            xQTx3M1         = fp2Subt xQTx3 (lift 1)
+            x3Squared       = fp2Square x3
+            largeFactor     = fp2AddL[fp2Mult xQ (fp2Subt xQTx3 (fp2Mult (lift 3) x3Squared)), xQ, x3]
+            numeratorX      = fp2Mult xQ (fp2Square xQTx3M1)
+            numeratorY      = fp2MultL [yQ, xQTx3M1, largeFactor]
+            xQMx3           = fp2Subt xQ x3
+            denominatorX    = fp2Square xQMx3 
+            denominatorY    = fp2Mult denominatorX xQMx3
+            xQ'             = fp2Div numeratorX denominatorX
+            yQ'             = fp2Div numeratorY denominatorY
+            Q'              = mkAffine xQ' yQ'
+
+// xQ':=xQ*(xQ*x3-1)^2/(xQ-x3)^2;
+// yQ':=yQ*(xQ*x3-1)*(xQ^2*x3-3*xQ*x3^2+xQ+x3)/(xQ-x3)^3;
+
+// Algorithm 38
+iso_2_e : {n} (fin n) => EllipticPoint -> (MontgomeryCurve, [n]EllipticPoint) -> (MontgomeryCurve, [n]EllipticPoint)
+iso_2_e S' (C', Ps') = (C'', Ps'')
+    where   init = {S = S', C = C', Ps = Ps'}
+            init' = if (`e2 : Integer) % 2 == 1 then iso_2_e_step`{width e2} (`e2 - 1) init else init
+            ms = reverse $ map (\x -> x - 2) [2, 4 .. e2]
+            ys = [init'] # [ iso_4_e_step`{width e2} m y | m <- ms | y <- ys ]
+            final_y = ys ! 0
+            (C'', Ps'') = (final_y.C, final_y.Ps)
+            iso_2_e_step : {m} (fin m) => [m] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
+            iso_2_e_step k y = {S = eval_2_iso xT y.S, C = curve_2_iso xT y.C, Ps = map (eval_2_iso xT) y.Ps}
+                where   T = xDBLe k y.C y.S
+                        xT = if ~T.isAffine then undefined else T.affine.x
+            iso_4_e_step : {m} (fin m) => [m] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
+            iso_4_e_step k y = {S = eval_4_iso xT y.S, C = curve_4_iso xT y.C, Ps = map (eval_4_iso xT) y.Ps}
+                where   T = xDBLe k y.C y.S
+                        xT = if ~T.isAffine then undefined else T.affine.x
+
+// Algorithm 39
+iso_3_e : {n} (fin n) => EllipticPoint -> (MontgomeryCurve, [n]EllipticPoint) -> (MontgomeryCurve, [n]EllipticPoint)
+iso_3_e S' (C', Ps') = (C'', Ps'')
+    where   init = {S = S', C = C', Ps = Ps'}
+            ms = map (\x -> x - 1) [e3, e3 - 1 .. 1]
+            ys = [init] # [ iso_3_e_step`{width e3} m y | m <- ms | y <- ys ]
+            final_y = ys ! 0
+            (C'', Ps'') = (final_y.C, final_y.Ps)
+            iso_3_e_step : {m} (fin m) => [m] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
+            iso_3_e_step k y = {S = eval_3_iso xT y.S, C = curve_3_iso xT y.C, Ps = map (eval_3_iso xT) y.Ps}
+                where   T = xTPLe k y.C y.S
+                        xT = if ~T.isAffine then undefined else T.affine.x
+
+// Algorithm 10
+get_A : [3]Fp2 -> MontgomeryCurve
+get_A [xP, xQ, xR] =    if sym3 == zero then undefined else mkMC (fp2Subt fraction sym1) (lift 1)
+                        where   sym0 = (lift 1)
+                                sym1 = fp2AddL [xP, xQ, xR]
+                                sym2 = fp2AddL [fp2Mult xP xQ, fp2Mult xP xR, fp2Mult xQ xR]
+                                sym3 = fp2MultL [xP, xQ, xR]
+                                fraction = fp2Div numerator denominator
+                                numerator = fp2Square $ fp2Subt sym0 sym2
+                                denominator = (fp2Doub >> fp2Doub) sym3
+
+get_Y : MontgomeryCurve -> Fp2 -> Fp2
+get_Y (C : MontgomeryCurve) xP = yP
+    where   (a, b) = (C.A, C.B)
+            xPSquared       = fp2Square xP
+            xPCubed         = fp2Mult xP xPSquared
+            yPSquared       = fp2Div (fp2AddL [xPCubed, fp2Mult a xPSquared, xP]) b
+            yP              = fp2Sqrt yPSquared
+
+// Algorithm 40
+get_xR : MontgomeryCurve -> EllipticPoint -> EllipticPoint -> Fp2
+get_xR C P Q = (xADD C P $ xNEGATE C Q).affine.x
+
+// Algorithm 41
+get_yP_yQ_A_B : PublicKey -> ([2]Fp2, MontgomeryCurve)
+get_yP_yQ_A_B pk = ([yP, yQ'], C)
+    where   
+            C = get_A pk
+            [xP, xQ, xR]    = pk
+            [yP, yQ]        = map (get_Y C) [xP, xQ]
+            P               = mkAffine xP yP
+            Q               = mkAffine xQ yQ
+            yQ'             = if (get_xR C P Q) != xR then fp2AddInv yQ else yQ
+    
+
+//
+// Assemble public generator points.
+//
+
+xP2 = ostofp2 $ (itoos`{Np} xP20) # (itoos`{Np} xP21)
+yP2 = ostofp2 $ (itoos`{Np} yP20) # (itoos`{Np} yP21)
+P2  = mkAffine xP2 yP2
+
+// xR2 = ostofp2 $ (itoos`{Np} xR20) # (itoos`{Np} xR21)
+
+xQ2 = ostofp2 $ (itoos`{Np} xQ20) # (itoos`{Np} xQ21)
+yQ2 = ostofp2 $ (itoos`{Np} yQ20) # (itoos`{Np} yQ21)
+Q2  = mkAffine xQ2 yQ2
+
+
+xP3 = ostofp2 $ (itoos`{Np} xP30) # (itoos`{Np} xP31)
+yP3 = ostofp2 $ (itoos`{Np} yP30) # (itoos`{Np} yP31)
+P3 =  mkAffine xP3 yP3
+
+xQ3 = ostofp2 $ (itoos`{Np} xQ30) # (itoos`{Np} xQ31)
+yQ3 = ostofp2 $ (itoos`{Np} yQ30) # (itoos`{Np} yQ31)
+Q3 =  mkAffine xQ3 yQ3
+
+//
+// isogen_l and isoex_l for l in {2, 3}
+//
+
+// Algorithm 42
+isogen_2 : SecretKeyTwo -> [6*Np][8]
+isogen_2 sk2 = pktoos pk2
+    where S = xADD startingCurve P2 (double_and_add startingCurve Q2 $ join sk2)
+          (C, [P3', Q3']) = iso_3_e S (startingCurve, [P3, Q3])
+          xP3' = P3'.affine.x
+          xQ3' = Q3'.affine.x
+          xR3' = get_xR C P3' Q3'
+          pk2 = [xP3', xQ3', xR3']
+
+// Algorithm 43
+//isogen_3 : SecretKeyThree -> [6*Np][8]
+isogen_3 sk3 = pktoos pk3
+    where S = xADD startingCurve P3 (double_and_add startingCurve Q3 $ join sk3)
+          (C, [P2', Q2']) = iso_3_e S (startingCurve, [P2, Q2])
+          xP2' = P2'.affine.x
+          xQ2' = Q2'.affine.x
+          xR2' = get_xR C P2' Q2'
+          pk3 = [xP2', xQ2', xR2']
+
+// Algorithm 44
+isoex_2 : PublicKey -> SecretKeyTwo -> [2*Np][8]
+isoex_2 pk3 sk2 = fp2toos j2
+    where   [xP2', xQ2', xR2'] = pk3
+            ([yP2', yQ2'], C) = get_yP_yQ_A_B pk3
+            P2' = mkAffine xP2' yP2' 
+            Q2' = mkAffine xQ2' yQ2'
+            S = xADD C P2' (double_and_add C Q2' $ join sk2)
+            (C', _) = iso_2_e S (C, [])
+            j2 = j_inv C'
+
+
+// Algorithm 45
+isoex_3 : PublicKey -> SecretKeyThree -> [2*Np][8]
+isoex_3 pk2 sk3 = fp2toos j3
+    where   [xP3', xQ3', xR3'] = pk2
+            ([yP3', yQ3'], C) = get_yP_yQ_A_B pk2
+            P3' = mkAffine xP3' yP3' 
+            Q3' = mkAffine xQ3' yQ3'
+            S = xADD C P3' (double_and_add C Q3' $ join sk3)
+            (C', _) = iso_3_e S (C, [])
+            j3 = j_inv C'
+
+// Hash functions. Defined using SHAKE-256. Currently zeroed out.
+
+F : [2*Np*8] -> [MessageLength]
+F = SHAKE256 >> take
+
+G : [MessageLength + 6*Np*8] -> [Nsk2*8] // (Nsk2*8 should be = e2)
+G = SHAKE256 >> take
+
+H : [MessageLength + 6*Np*8 + MessageLength ] -> [crypto_bytes*8]
+H = SHAKE256 >> take
+
+// PKE (Algorithm 1)
+
+PKE_Gen : SecretKeyThree -> (PublicKey, SecretKeyThree) // The "input" here should be chosen uniformly at random from K_3.
+PKE_Gen sk3 = (pk3, sk3)
+    where pk3 = ostopk $ isogen_3 sk3
+
+PKE_Enc : PublicKey -> [MessageLength] -> SecretKeyTwo -> (PublicKey, [MessageLength]) // sk2 here should be chosen uniformly at random from K_2 if used for PKE.
+PKE_Enc pk3 m sk2 = (c0, c1)
+    where   c0  = ostopk $ isogen_2 sk2
+            j   = join $ isoex_2 pk3 sk2
+            h   = F j
+            c1  = h ^ m
+
+PKE_Dec : SecretKeyThree -> (PublicKey, [MessageLength]) -> [MessageLength]
+PKE_Dec sk3 (c0, c1) = m
+    where   j   = join $ isoex_3 c0 sk3
+            h   = F j
+            m   = h ^ c1
+
+// KEM (Algorithm 2)
+
+KEM_KeyGen : SecretKeyThree -> [MessageLength] -> ([MessageLength], SecretKeyThree, PublicKey) // sk3 and s are random.
+KEM_KeyGen sk3 s = (s, sk3, pk3)
+    where pk3 = ostopk $ isogen_3 sk3
+    
+KEM_Encaps : PublicKey -> [MessageLength] -> ((PublicKey, [MessageLength]), [SymKeyLength]) // m is random
+KEM_Encaps pk3 m = (c, K)
+    where   r   = G $ m # (join $ pktoos pk3)
+            c   = PKE_Enc pk3 m (split r)
+            K   =  H $ m # (join $ pktoos c.0) # c.1
+
+KEM_Decaps : ([MessageLength], SecretKeyThree, PublicKey) -> (PublicKey, [MessageLength]) -> [SymKeyLength]
+KEM_Decaps (s, sk3, pk3) (c0, c1) = K
+    where   m'  = PKE_Dec sk3 (c0, c1)
+            r'  = G $ m' # (join $ pktoos pk3)
+            c0' = ostopk $ isogen_2 $ split r'
+            K   = H $ m # (join $ pktoos c0) # c1
+            m   = if c0' == c0 then m' else s
+            
+           
+// Random pick
+type Seed = [Nsk3*8 + Nsk2*8 + MessageLength]
+
+RandomK3 : Seed -> SecretKeyThree
+RandomK3 s = split $ take`{Nsk3*8} $ drop`{0} s
+
+RandomK2 : Seed -> SecretKeyTwo
+RandomK2 s = split $ take`{Nsk2*8} $ drop`{Nsk3*8} s
+
+RandomMessage : Seed -> [MessageLength]
+RandomMessage s = take`{MessageLength} $ drop`{Nsk3*8 + Nsk2*8} s
+
+seed1 = take 0x3f50db15922bc5db364db584e106d9d3bc3d39b6c8656a1187db4f3cb1444cd79e200ec36d6061eb8ff6000b16a04b37e499350876238d47cb687ad080e7e461638e3deea656
+
+SeedInit : Seed -> (SecretKeyThree, SecretKeyTwo, [MessageLength])
+SeedInit s = (RandomK3 s, RandomK2 s, RandomMessage s)
