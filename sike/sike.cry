@@ -656,7 +656,7 @@ Q3 =  mkAffine xQ3 yQ3
 isogen_2 : SecretKeyTwo -> [6*Np][8]
 isogen_2 sk2 = pktoos pk2
     where S = xADD startingCurve P2 (double_and_add startingCurve Q2 $ join sk2)
-          (C, [P3', Q3']) = iso_3_e S (startingCurve, [P3, Q3])
+          (C, [P3', Q3']) = iso_2_e S (startingCurve, [P3, Q3])
           xP3' = P3'.affine.x
           xQ3' = Q3'.affine.x
           xR3' = get_xR C P3' Q3'
