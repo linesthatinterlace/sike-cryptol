@@ -734,6 +734,13 @@ PKE_Dec sk3 (c0, c1) = m
             h   = F j
             m   = h ^ c1
 
+PKE_Test : ([Nsk3][8], [Nsk2][8], [msg_bytes][8]) -> Bit
+property PKE_Test (sk3, sk2, m) = (plaintext == m)
+    where   pk3 = (PKE_Gen sk3).0
+            ciphertext = PKE_Enc pk3 m sk2
+            plaintext = PKE_Dec sk3 ciphertext
+    
+
 // KEM (Algorithm 2)
 
 KEM_KeyGen : [Nsk3][8] -> [msg_bytes][8] -> ([msg_bytes][8], [Nsk3][8], [6*Np][8]) // sk3 and s are random.
