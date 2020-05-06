@@ -81,12 +81,6 @@ infixr 1 $
 type Np = lg2 p /^ 8
 type Nsk2 = e2 /^ 8
 type Nsk3 = lg2 (3^^e3) / 8
-type MessageLength = msg_bytes*8
-type SymKeyLength = crypto_bytes*8
-
-type PublicKey = [3]Fp2
-type SecretKeyTwo   = [Nsk2][8]
-type SecretKeyThree = [Nsk3][8]
 
 // 
 // Data type conversions.
@@ -104,7 +98,7 @@ ostofp xs = if (a < 0) || (a > `p - 1)
 ostofp2 : [2*Np][8] -> Fp2
 ostofp2 = split >> map ostofp
 
-ostopk : [6*Np][8] -> PublicKey
+ostopk : [6*Np][8] -> [3]Fp2
 ostopk = split >> map ostofp2
 
 itoos : {mlen} (fin mlen) => Integer -> [mlen][8]
@@ -116,7 +110,7 @@ fptoos = fromZ >> itoos
 fp2toos : Fp2 -> [2*Np][8]
 fp2toos = map fptoos >> join
 
-pktoos : PublicKey -> [6*Np][8]
+pktoos : [3]Fp2 -> [6*Np][8]
 pktoos = map fp2toos >> join
 
 
@@ -614,11 +608,11 @@ get_xR : MontgomeryCurve -> EllipticPoint -> EllipticPoint -> Fp2
 get_xR C P Q = (xADD C P $ xNEGATE C Q).affine.x
 
 // Algorithm 41
-get_yP_yQ_A_B : PublicKey -> ([2]Fp2, MontgomeryCurve)
+get_yP_yQ_A_B : [6*Np][8] -> ([2]Fp2, MontgomeryCurve)
 get_yP_yQ_A_B pk = ([yP, yQ'], C)
     where   
-            C = get_A pk
-            [xP, xQ, xR]    = pk
+            [xP, xQ, xR]    = ostopk pk
+            C               = get_A [xP, xQ, xR]
             [yP, yQ]        = map (get_Y C) [xP, xQ]
             P               = mkAffine xP yP
             Q               = mkAffine xQ yQ
@@ -653,112 +647,112 @@ Q3 =  mkAffine xQ3 yQ3
 //
 
 // Algorithm 42
-isogen_2 : SecretKeyTwo -> [6*Np][8]
-isogen_2 sk2 = pktoos pk2
+isogen_2 : [Nsk2][8] -> [6*Np][8]
+isogen_2 sk2 = pk2
     where S = xADD startingCurve P2 (double_and_add startingCurve Q2 $ join sk2)
           (C, [P3', Q3']) = iso_2_e S (startingCurve, [P3, Q3])
           xP3' = P3'.affine.x
           xQ3' = Q3'.affine.x
           xR3' = get_xR C P3' Q3'
-          pk2 = [xP3', xQ3', xR3']
+          pk2 = pktoos [xP3', xQ3', xR3']
 
 // Algorithm 43
-//isogen_3 : SecretKeyThree -> [6*Np][8]
-isogen_3 sk3 = pktoos pk3
+isogen_3 : [Nsk3][8] -> [6*Np][8]
+isogen_3 sk3 = pk3
     where S = xADD startingCurve P3 (double_and_add startingCurve Q3 $ join sk3)
           (C, [P2', Q2']) = iso_3_e S (startingCurve, [P2, Q2])
           xP2' = P2'.affine.x
           xQ2' = Q2'.affine.x
           xR2' = get_xR C P2' Q2'
-          pk3 = [xP2', xQ2', xR2']
+          pk3 = pktoos [xP2', xQ2', xR2']
 
 // Algorithm 44
-isoex_2 : PublicKey -> SecretKeyTwo -> [2*Np][8]
-isoex_2 pk3 sk2 = fp2toos j2
-    where   [xP2', xQ2', xR2'] = pk3
+isoex_2 : [6*Np][8] -> [Nsk2][8] -> [2*Np][8]
+isoex_2 pk3 sk2 = j2
+    where   [xP2', xQ2', xR2'] = ostopk pk3
             ([yP2', yQ2'], C) = get_yP_yQ_A_B pk3
             P2' = mkAffine xP2' yP2' 
             Q2' = mkAffine xQ2' yQ2'
             S = xADD C P2' (double_and_add C Q2' $ join sk2)
             (C', _) = iso_2_e S (C, [])
-            j2 = j_inv C'
+            j2 = fp2toos $ j_inv C'
 
 
 // Algorithm 45
-isoex_3 : PublicKey -> SecretKeyThree -> [2*Np][8]
-isoex_3 pk2 sk3 = fp2toos j3
-    where   [xP3', xQ3', xR3'] = pk2
+isoex_3 : [6*Np][8] -> [Nsk3][8] -> [2*Np][8]
+isoex_3 pk2 sk3 = j3
+    where   [xP3', xQ3', xR3'] = ostopk pk2
             ([yP3', yQ3'], C) = get_yP_yQ_A_B pk2
             P3' = mkAffine xP3' yP3' 
             Q3' = mkAffine xQ3' yQ3'
             S = xADD C P3' (double_and_add C Q3' $ join sk3)
             (C', _) = iso_3_e S (C, [])
-            j3 = j_inv C'
+            j3 = fp2toos $ j_inv C'
 
 // Hash functions. Defined using SHAKE-256. Currently zeroed out.
 
-F : [2*Np*8] -> [MessageLength]
-F = SHAKE256 >> take
+F : [2*Np][8] -> [msg_bytes][8]
+F = join >> SHAKE256 >> take >> split
 
-G : [MessageLength + 6*Np*8] -> [Nsk2*8] // (Nsk2*8 should be = e2)
-G = SHAKE256 >> take
+G : [msg_bytes + 6*Np][8] -> [Nsk2][8] // (Nsk2*8 should be = e2)
+G = join >> SHAKE256 >> take >> split
 
-H : [MessageLength + 6*Np*8 + MessageLength ] -> [crypto_bytes*8]
-H = SHAKE256 >> take
+H : [msg_bytes + 6*Np + msg_bytes][8] -> [crypto_bytes][8]
+H = join >> SHAKE256 >> take >> split
 
 // PKE (Algorithm 1)
 
-PKE_Gen : SecretKeyThree -> (PublicKey, SecretKeyThree) // The "input" here should be chosen uniformly at random from K_3.
+PKE_Gen : [Nsk3][8] -> ([6*Np][8], [Nsk3][8]) // The "input" here should be chosen uniformly at random from K_3.
 PKE_Gen sk3 = (pk3, sk3)
-    where pk3 = ostopk $ isogen_3 sk3
+    where pk3 = isogen_3 sk3
 
-PKE_Enc : PublicKey -> [MessageLength] -> SecretKeyTwo -> (PublicKey, [MessageLength]) // sk2 here should be chosen uniformly at random from K_2 if used for PKE.
+PKE_Enc : [6*Np][8] -> [msg_bytes][8] -> [Nsk2][8] -> ([6*Np][8], [msg_bytes][8]) // sk2 here should be chosen uniformly at random from K_2 if used for PKE.
 PKE_Enc pk3 m sk2 = (c0, c1)
-    where   c0  = ostopk $ isogen_2 sk2
-            j   = join $ isoex_2 pk3 sk2
+    where   c0  = isogen_2 sk2
+            j   = isoex_2 pk3 sk2
             h   = F j
             c1  = h ^ m
 
-PKE_Dec : SecretKeyThree -> (PublicKey, [MessageLength]) -> [MessageLength]
+PKE_Dec : [Nsk3][8] -> ([6*Np][8], [msg_bytes][8]) -> [msg_bytes][8]
 PKE_Dec sk3 (c0, c1) = m
-    where   j   = join $ isoex_3 c0 sk3
+    where   j   = isoex_3 c0 sk3
             h   = F j
             m   = h ^ c1
 
 // KEM (Algorithm 2)
 
-KEM_KeyGen : SecretKeyThree -> [MessageLength] -> ([MessageLength], SecretKeyThree, PublicKey) // sk3 and s are random.
+KEM_KeyGen : [Nsk3][8] -> [msg_bytes][8] -> ([msg_bytes][8], [Nsk3][8], [6*Np][8]) // sk3 and s are random.
 KEM_KeyGen sk3 s = (s, sk3, pk3)
-    where pk3 = ostopk $ isogen_3 sk3
+    where pk3 = isogen_3 sk3
     
-KEM_Encaps : PublicKey -> [MessageLength] -> ((PublicKey, [MessageLength]), [SymKeyLength]) // m is random
+KEM_Encaps : [6*Np][8] -> [msg_bytes][8] -> (([6*Np][8], [msg_bytes][8]), [crypto_bytes][8]) // m is random
 KEM_Encaps pk3 m = (c, K)
-    where   r   = G $ m # (join $ pktoos pk3)
-            c   = PKE_Enc pk3 m (split r)
-            K   =  H $ m # (join $ pktoos c.0) # c.1
+    where   r   = G $ m # pk3
+            c   = PKE_Enc pk3 m r
+            K   = H $ m # c.0 # c.1
 
-KEM_Decaps : ([MessageLength], SecretKeyThree, PublicKey) -> (PublicKey, [MessageLength]) -> [SymKeyLength]
+KEM_Decaps : ([msg_bytes][8], [Nsk3][8], [6*Np][8]) -> ([6*Np][8], [msg_bytes][8]) -> [crypto_bytes][8]
 KEM_Decaps (s, sk3, pk3) (c0, c1) = K
     where   m'  = PKE_Dec sk3 (c0, c1)
-            r'  = G $ m' # (join $ pktoos pk3)
-            c0' = ostopk $ isogen_2 $ split r'
-            K   = H $ m # (join $ pktoos c0) # c1
+            r'  = G $ m' # pk3
+            c0' = isogen_2 r'
+            K   = H $ m # c0 # c1
             m   = if c0' == c0 then m' else s
             
            
-// Random pick
-type Seed = [Nsk3*8 + Nsk2*8 + MessageLength]
+// Using SHAKE256, get some pseudorandomness.
 
-RandomK3 : Seed -> SecretKeyThree
-RandomK3 s = split $ take`{Nsk3*8} $ drop`{0} s
+RandomK3 : {n} (fin n) => [n] -> [Nsk3][8]
+RandomK3 s = take`{Nsk3} $ drop`{0} s'
+    where s' = split $ SHAKE256 s
 
-RandomK2 : Seed -> SecretKeyTwo
-RandomK2 s = split $ take`{Nsk2*8} $ drop`{Nsk3*8} s
+RandomK2 : {n} (fin n) => [n] -> [Nsk2][8]
+RandomK2 s = take`{Nsk2} $ drop`{Nsk3} s'
+    where s' = split $ SHAKE256 s
 
-RandomMessage : Seed -> [MessageLength]
-RandomMessage s = take`{MessageLength} $ drop`{Nsk3*8 + Nsk2*8} s
+RandomMessage : {n} (fin n) => [n] -> [msg_bytes][8]
+RandomMessage s = take`{msg_bytes} $ drop`{Nsk3 + Nsk2} s'
+    where s' = split $ SHAKE256 s
 
-seed1 = take 0x3f50db15922bc5db364db584e106d9d3bc3d39b6c8656a1187db4f3cb1444cd79e200ec36d6061eb8ff6000b16a04b37e499350876238d47cb687ad080e7e461638e3deea656
-
-SeedInit : Seed -> (SecretKeyThree, SecretKeyTwo, [MessageLength])
-SeedInit s = (RandomK3 s, RandomK2 s, RandomMessage s)
+randomInit : {n} (fin n) => [n] -> ([Nsk3][8], [Nsk2][8], [msg_bytes][8])
+randomInit s = (RandomK3 s, RandomK2 s, RandomMessage s)
