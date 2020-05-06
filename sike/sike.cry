@@ -557,32 +557,45 @@ eval_3_iso x3 Q = Q'
 iso_2_e : {n} (fin n) => EllipticPoint -> (MontgomeryCurve, [n]EllipticPoint) -> (MontgomeryCurve, [n]EllipticPoint)
 iso_2_e S' (C', Ps') = (C'', Ps'')
     where   init = {S = S', C = C', Ps = Ps'}
-            init' = if (`e2 : Integer) % 2 == 1 then iso_2_e_step`{width e2} (`e2 - 1) init else init
+            init' = if (`e2 : Integer) % 2 == 1 then iso_2_e_odd_step (`e2 - 1) init else init
             ms = reverse $ map (\x -> x - 2) [2, 4 .. e2]
-            ys = [init'] # [ iso_4_e_step`{width e2} m y | m <- ms | y <- ys ]
+            ys = [init'] # [ iso_2_e_step m y | m <- ms | y <- ys ]
             final_y = ys ! 0
             (C'', Ps'') = (final_y.C, final_y.Ps)
-            iso_2_e_step : {m} (fin m) => [m] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
-            iso_2_e_step k y = {S = eval_2_iso xT y.S, C = curve_2_iso xT y.C, Ps = map (eval_2_iso xT) y.Ps}
-                where   T = xDBLe k y.C y.S
-                        xT = if ~T.isAffine then undefined else T.affine.x
-            iso_4_e_step : {m} (fin m) => [m] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
-            iso_4_e_step k y = {S = eval_4_iso xT y.S, C = curve_4_iso xT y.C, Ps = map (eval_4_iso xT) y.Ps}
-                where   T = xDBLe k y.C y.S
-                        xT = if ~T.isAffine then undefined else T.affine.x
+
+iso_2_e_odd_step : {n} (fin n) => [width e2] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
+iso_2_e_odd_step k y = {S = S', C = C', Ps = Ps'}
+    where   T   = xDBLe k y.C y.S
+            xT  = if ~T.isAffine then undefined else T.affine.x
+            S'  = eval_2_iso xT y.S
+            C'  = curve_2_iso xT y.C
+            Ps' = map (eval_2_iso xT) y.Ps
+
+iso_2_e_step : {n} (fin n) => [width e2] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
+iso_2_e_step k y = {S = S', C = C', Ps = Ps'}
+    where   T   = xDBLe k y.C y.S
+            xT  = if ~T.isAffine then undefined else T.affine.x
+            S'  = eval_4_iso xT y.S
+            C'  = curve_4_iso xT y.C
+            Ps' = map (eval_4_iso xT) y.Ps
 
 // Algorithm 39
 iso_3_e : {n} (fin n) => EllipticPoint -> (MontgomeryCurve, [n]EllipticPoint) -> (MontgomeryCurve, [n]EllipticPoint)
 iso_3_e S' (C', Ps') = (C'', Ps'')
     where   init = {S = S', C = C', Ps = Ps'}
             ms = map (\x -> x - 1) [e3, e3 - 1 .. 1]
-            ys = [init] # [ iso_3_e_step`{width e3} m y | m <- ms | y <- ys ]
+            ys = [init] # [ iso_3_e_step m y | m <- ms | y <- ys ]
             final_y = ys ! 0
             (C'', Ps'') = (final_y.C, final_y.Ps)
-            iso_3_e_step : {m} (fin m) => [m] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
-            iso_3_e_step k y = {S = eval_3_iso xT y.S, C = curve_3_iso xT y.C, Ps = map (eval_3_iso xT) y.Ps}
-                where   T = xTPLe k y.C y.S
-                        xT = if ~T.isAffine then undefined else T.affine.x
+
+iso_3_e_step : {n} (fin n) => [width e3] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
+iso_3_e_step k y = {S = S', C = C', Ps = Ps'}
+    where   T = xTPLe k y.C y.S
+            xT = if ~T.isAffine then undefined else T.affine.x
+            S' = eval_3_iso xT y.S
+            C' = curve_3_iso xT y.C
+            Ps' = map (eval_3_iso xT) y.Ps
+
 
 // Algorithm 10
 get_A : [3]Fp2 -> MontgomeryCurve
