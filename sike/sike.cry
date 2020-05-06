@@ -124,8 +124,6 @@ type Fp = Z p
 fpAdd : Fp -> Fp -> Fp
 fpAdd a b = a + b
 
-property fpAddCom a b = fpAdd a b == fpAdd b a
-
 fpAddL : {n} (fin n) => [n]Fp -> Fp
 fpAddL xs = ys ! 0
     where ys = [zero] # [fpAdd x y | x <- xs | y <- ys ]
@@ -662,31 +660,34 @@ Q3 =  mkAffine xQ3 yQ3
 // Algorithm 42
 isogen_2 : [Nsk2][8] -> [6*Np][8]
 isogen_2 sk2 = pk2
-    where S = xADD startingCurve P2 (double_and_add startingCurve Q2 $ join sk2)
-          (C, [P3', Q3']) = iso_2_e S (startingCurve, [P3, Q3])
-          xP3' = P3'.affine.x
-          xQ3' = Q3'.affine.x
-          xR3' = get_xR C P3' Q3'
-          pk2 = pktoos [xP3', xQ3', xR3']
+    where   exponent = fromInteger $ ostoi sk2
+            S = xADD startingCurve P2 (double_and_add`{Nsk2*8} startingCurve Q2 exponent )
+            (C, [P3', Q3']) = iso_2_e S (startingCurve, [P3, Q3])
+            xP3' = P3'.affine.x
+            xQ3' = Q3'.affine.x
+            xR3' = get_xR C P3' Q3'
+            pk2 = pktoos [xP3', xQ3', xR3']
 
 // Algorithm 43
 isogen_3 : [Nsk3][8] -> [6*Np][8]
 isogen_3 sk3 = pk3
-    where S = xADD startingCurve P3 (double_and_add startingCurve Q3 $ join sk3)
-          (C, [P2', Q2']) = iso_3_e S (startingCurve, [P2, Q2])
-          xP2' = P2'.affine.x
-          xQ2' = Q2'.affine.x
-          xR2' = get_xR C P2' Q2'
-          pk3 = pktoos [xP2', xQ2', xR2']
+    where   exponent = fromInteger $ ostoi sk3
+            S = xADD startingCurve P3 (double_and_add`{Nsk3*8} startingCurve Q3 exponent)
+            (C, [P2', Q2']) = iso_3_e S (startingCurve, [P2, Q2])
+            xP2' = P2'.affine.x
+            xQ2' = Q2'.affine.x
+            xR2' = get_xR C P2' Q2'
+            pk3 = pktoos [xP2', xQ2', xR2']
 
 // Algorithm 44
 isoex_2 : [6*Np][8] -> [Nsk2][8] -> [2*Np][8]
 isoex_2 pk3 sk2 = j2
-    where   [xP2', xQ2', xR2'] = ostopk pk3
+    where   exponent = fromInteger $ ostoi sk2
+            [xP2', xQ2', xR2'] = ostopk pk3
             ([yP2', yQ2'], C) = get_yP_yQ_A_B pk3
             P2' = mkAffine xP2' yP2' 
             Q2' = mkAffine xQ2' yQ2'
-            S = xADD C P2' (double_and_add C Q2' $ join sk2)
+            S = xADD C P2' (double_and_add`{Nsk2*8} C Q2' exponent)
             (C', _) = iso_2_e S (C, [])
             j2 = fp2toos $ j_inv C'
 
@@ -694,11 +695,12 @@ isoex_2 pk3 sk2 = j2
 // Algorithm 45
 isoex_3 : [6*Np][8] -> [Nsk3][8] -> [2*Np][8]
 isoex_3 pk2 sk3 = j3
-    where   [xP3', xQ3', xR3'] = ostopk pk2
+    where   exponent = fromInteger $ ostoi sk3
+            [xP3', xQ3', xR3'] = ostopk pk2
             ([yP3', yQ3'], C) = get_yP_yQ_A_B pk2
             P3' = mkAffine xP3' yP3' 
             Q3' = mkAffine xQ3' yQ3'
-            S = xADD C P3' (double_and_add C Q3' $ join sk3)
+            S = xADD C P3' (double_and_add`{Nsk3*8} C Q3' exponent)
             (C', _) = iso_3_e S (C, [])
             j3 = fp2toos $ j_inv C'
 
