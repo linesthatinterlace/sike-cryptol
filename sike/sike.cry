@@ -705,7 +705,7 @@ isoex_3 pk2 sk3 = j3
             j3 = fp2toos $ j_inv C'
 
 isoTest : ([Nsk2][8], [Nsk3][8]) -> Bit
-property iso_test (sk2, sk3) = route1 == route2
+property isoTest (sk2, sk3) = route1 == route2
     where   route1 = isoex_3 (isogen_2 sk2) sk3
             route2 = isoex_2 (isogen_3 sk3) sk2
             
