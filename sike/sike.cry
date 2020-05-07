@@ -704,6 +704,11 @@ isoex_3 pk2 sk3 = j3
             (C', _) = iso_3_e S (C, [])
             j3 = fp2toos $ j_inv C'
 
+isoTest : ([Nsk2][8], [Nsk3][8]) -> Bit
+property iso_test (sk2, sk3) = route1 == route2
+    where   route1 = isoex_3 (isogen_2 sk2) sk3
+            route2 = isoex_2 (isogen_3 sk3) sk2
+            
 // Hash functions. Defined using SHAKE-256. Currently zeroed out.
 
 F : [2*Np][8] -> [msg_bytes][8]
@@ -734,8 +739,8 @@ PKE_Dec sk3 (c0, c1) = m
             h   = F j
             m   = h ^ c1
 
-PKE_Test : ([Nsk3][8], [Nsk2][8], [msg_bytes][8]) -> Bit
-property PKE_Test (sk3, sk2, m) = (plaintext == m)
+pkeTest : ([Nsk3][8], [Nsk2][8], [msg_bytes][8]) -> Bit
+property pkeTest (sk3, sk2, m) = (plaintext == m)
     where   pk3 = (PKE_Gen sk3).0
             ciphertext = PKE_Enc pk3 m sk2
             plaintext = PKE_Dec sk3 ciphertext
