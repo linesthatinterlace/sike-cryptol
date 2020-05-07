@@ -341,10 +341,6 @@ xDBL C P =      if ~P.isAffine
                             lambda_bottom = fp2Add byP byP
                             byP = fp2Mult C.B yP
 
-xDBL' : MontgomeryCurve -> EllipticPoint -> Fp2
-xDBL' C P =     xP//mkAffine x2P y2P
-                    where   xP = P.affine.x
-
 
 // Algorithm 26
 xDBLe : {n} (fin n) => [n] -> MontgomeryCurve -> EllipticPoint -> EllipticPoint
@@ -410,28 +406,38 @@ j_inv C = fp2Div numerator denominator
 // Algorithm 32
 curve_2_iso : Fp2 -> MontgomeryCurve -> MontgomeryCurve
 curve_2_iso x2 C = {A = a', B = b'}
-                    where   a' = fp2Doub(fp2Subt (lift 1) (fp2Doub x2s))
-                            b' = fp2Mult x2 C.B
-                            x2s = fp2Square x2
+    where   t1  = fp2Square x2
+            t2  = fp2Doub t1
+            t3  = fp2Subt (lift 1) t2
+            t4  = fp2Doub t3
+            t5  = fp2Mult x2 C.B
+            a'  = t4
+            b'  = t5
                             
 // a' = 2*(1-2*x2^2)
 // b' = x2*b
-               
+          
+         
 // Algorithm 33
 eval_2_iso : Fp2 -> EllipticPoint -> EllipticPoint
 eval_2_iso x2 Q = Q'
-    where   (xQ, yQ)        = (Q.affine.x, Q.affine.y)
-            xQx2            = fp2Mult xQ x2
-            xQxQx2          = fp2Mult xQx2 xQ
-            xQx2x2          = fp2Mult xQx2 x2
-            numeratorX      = fp2Subt xQxQx2 xQ
-            numeratorY      = fp2AddL [xQxQx2, m2xQx2x2, x2]
-            m2xQx2x2        = fp2AddInv $ fp2Doub xQx2x2
-            denominatorX    = fp2Subt xQ x2
-            denominatorY    = fp2Square denominatorX
-            xQ'             = fp2Div numeratorX denominatorX
-            yQ'             = fp2Div numeratorY denominatorY
-            Q'              = mkAffine xQ' yQ'
+    where   (xQ, yQ) = (Q.affine.x, Q.affine.y)
+            t1  = fp2Mult xQ x2
+            t2  = fp2Mult xQ t1
+            t3  = fp2Mult t1 x2
+            t4  = fp2Doub t3
+            t5  = fp2Subt t2 t4
+            t6  = fp2Add t5 x2
+            t7  = fp2Mult yQ t6
+            t8  = fp2Subt t2 xQ
+            t9  = fp2Subt xQ x2
+            t10 = fp2MultInv t9
+            t11 = fp2Mult t8 t10
+            t12 = fp2Square t10
+            t13 = fp2Mult t7 t12
+            xQ' = t11
+            yQ' = t13
+            Q'  = mkAffine xQ' yQ'
 
 // xQ':=(xQ^2*x2-xQ)/(xQ-x2);
 // yQ':=yQ*(xQ^2*x2-2*xQ*x2^2+x2)/(xQ-x2)^2;
@@ -439,11 +445,20 @@ eval_2_iso x2 Q = Q'
 // Algorithm 34
 curve_4_iso : Fp2 -> MontgomeryCurve -> MontgomeryCurve
 curve_4_iso x4 C = {A = a', B = b'}
-            where   a' = fp2Subt (fp2Doub $ fp2Doub x4Fourth) (lift 2)
-                    b' = fp2MultL [minusHalf, fp2Add x4Cubed x4, C.B]
-                    x4Fourth = fp2Square $ fp2Square x4
-                    x4Cubed = fp2Mult x4 $ fp2Square x4
-                    minusHalf = fp2AddInv $ fp2MultInv $ lift 2
+    where   t1  = fp2Square x4
+            t2  = fp2Square t1
+            t3  = fp2Doub t2
+            t4  = fp2Doub t3
+            t5  = lift 2
+            t6  = fp2Subt t4 t5
+            t7  = fp2Mult x4 t1
+            t8  = fp2Add t7 x4
+            t9  = fp2Mult t8 C.B
+            t10 = fp2MultInv t5
+            t11 = fp2AddInv t10
+            t12 = fp2Mult t11 t9
+            a'  = t6
+            b'  = t12
 
 // a':=4*x4^4-2;
 // b':== -(1/2)*(x4^3+x4)*b;
@@ -451,7 +466,7 @@ curve_4_iso x4 C = {A = a', B = b'}
 // Algorithm 35
 eval_4_iso : Fp2 -> EllipticPoint -> EllipticPoint
 eval_4_iso x4 Q = Q'
-    where   (xQ, yQ)        = (Q.affine.x, Q.affine.y)
+    where   (xQ, yQ) = (Q.affine.x, Q.affine.y)
             t1  = fp2Square xQ
             t2  = fp2Square t1
             t3  = fp2Square x4
@@ -463,7 +478,7 @@ eval_4_iso x4 Q = Q'
             t9  = fp2Doub t8
             t10 = fp2Add t7 t9
             t11 = fp2Add t5 t10
-            t12 = fp2Square t10
+            t12 = fp2Square t3
             t13 = fp2Mult t1 t12
             t14 = fp2Doub t13
             t15 = fp2Add t11 t14
@@ -475,7 +490,7 @@ eval_4_iso x4 Q = Q'
             t21 = fp2Subt t15 t20
             t22 = fp2Mult t16 x4 
             t23 = fp2Doub t22
-            t24 = fp2Doub t22
+            t24 = fp2Doub t23
             t25 = fp2Subt t21 t24
             t26 = fp2Mult xQ t17
             t27 = fp2Doub t26
@@ -484,13 +499,13 @@ eval_4_iso x4 Q = Q'
             t30 = fp2Add t29 t3
             t31 = fp2Add t30 (lift 1)
             t32 = fp2Mult xQ x4
-            t33 = fp2Subt t31 (lift 1)
+            t33 = fp2Subt t32 (lift 1)
             t34 = fp2Doub t32
             t35 = fp2Doub t34
             t36 = fp2Subt t31 t35
             t37 = fp2Mult t33 t36
             t38 = fp2Mult t3 t37
-            t39 = fp2Mult yQ t37
+            t39 = fp2Mult yQ t38
             t40 = fp2Doub t39
             t41 = fp2AddInv t40
             t42 = fp2Subt t34 t3
@@ -516,17 +531,24 @@ eval_4_iso x4 Q = Q'
             yQ' = t49
             Q'  = mkAffine xQ' yQ'
 
-// This implements, precisely, the algorithm in the specification, in a way that I have not (as of writing) done for the others.
 // xx:=x(-x*x4^2-x+2*x4)*C*C/(B*B*A);
 // yy:=y*x4^2*C*D/(B*B*B*A*A);
 
 // Algorithm 36
 curve_3_iso : Fp2 -> MontgomeryCurve -> MontgomeryCurve
 curve_3_iso x3 C = {A = a', B = b'}
-            where   a' = fp2Mult x3 $ fp2Add (fp2Mult C.A x3) (fp2Mult (lift 6) (fp2Subt (lift 1) x3Squared))
-                    b' = fp2Mult x3Squared C.B
-                    x3Cubed = fp2Mult x3 x3Squared
-                    x3Squared = fp2Square x3
+    where   t1  = fp2Square x3
+            t2  = fp2Mult C.B t1
+            t3  = fp2Doub t1
+            t4  = fp2Doub t3
+            t5  = fp2Add t3 t4
+            t6  = lift 6
+            t7  = fp2Subt t5 t6
+            t8  = fp2Mult C.A x3
+            t9  = fp2Subt t8 t7
+            t10 = fp2Mult t9 x3
+            a'  = t10
+            b'  = t2
 
 // a':=(a*x3-6*x3^2+6)*x3;
 // b':=b*x3^2;
@@ -534,19 +556,31 @@ curve_3_iso x3 C = {A = a', B = b'}
 // Algorithm 37
 eval_3_iso : Fp2 -> EllipticPoint -> EllipticPoint
 eval_3_iso x3 Q = Q'
-    where   (xQ, yQ)        = (Q.affine.x, Q.affine.y)
-            xQTx3           = fp2Mult xQ x3
-            xQTx3M1         = fp2Subt xQTx3 (lift 1)
-            x3Squared       = fp2Square x3
-            largeFactor     = fp2AddL[fp2Mult xQ (fp2Subt xQTx3 (fp2Mult (lift 3) x3Squared)), xQ, x3]
-            numeratorX      = fp2Mult xQ (fp2Square xQTx3M1)
-            numeratorY      = fp2MultL [yQ, xQTx3M1, largeFactor]
-            xQMx3           = fp2Subt xQ x3
-            denominatorX    = fp2Square xQMx3 
-            denominatorY    = fp2Mult denominatorX xQMx3
-            xQ'             = fp2Div numeratorX denominatorX
-            yQ'             = fp2Div numeratorY denominatorY
-            Q'              = mkAffine xQ' yQ'
+    where   (xQ, yQ) = (Q.affine.x, Q.affine.y)
+            t1  = fp2Square xQ
+            t2  = fp2Mult t1 x3
+            t3  = fp2Square x3
+            t4  = fp2Mult xQ t3
+            t5  = fp2Doub t4
+            t6  = fp2Add t4 t5
+            t7  = fp2Subt t2 t6
+            t8  = fp2Add t7 xQ
+            t9  = fp2Add t8 x3
+            t10 = fp2Subt xQ x3
+            t11 = fp2MultInv t10
+            t12 = fp2Square t11
+            t13 = fp2Mult t11 t12
+            t14 = fp2Mult xQ x3
+            t15 = fp2Subt t14 (lift 1)
+            t16 = fp2Mult t15 t9
+            t17 = fp2Mult t16 t13
+            t18 = fp2Square t15
+            t19 = fp2Mult t18 t12
+            t20 = fp2Mult xQ t19
+            t21 = fp2Mult yQ t17
+            xQ' = t20
+            yQ' = t21
+            Q'  = mkAffine xQ' yQ'
 
 // xQ':=xQ*(xQ*x3-1)^2/(xQ-x3)^2;
 // yQ':=yQ*(xQ*x3-1)*(xQ^2*x3-3*xQ*x3^2+xQ+x3)/(xQ-x3)^3;
