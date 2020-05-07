@@ -215,8 +215,9 @@ eea a b =   fixSign $ eea' a' b'
                     fixSign m = if m.d < 0 then -m else m
 
 
-                    
+//
 // F_(p^2)
+//
 
 type Fp2 = [2]Fp
 
@@ -742,8 +743,10 @@ isoTest : ([Nsk2][8], [Nsk3][8]) -> Bit
 property isoTest (sk2, sk3) = route1 == route2
     where   route1 = isoex_3 (isogen_2 sk2) sk3
             route2 = isoex_2 (isogen_3 sk3) sk2
-            
-// Hash functions. Defined using SHAKE-256. Currently zeroed out.
+
+//            
+// Hash functions. Defined using SHAKE-256.
+//
 
 F : [2*Np][8] -> [msg_bytes][8]
 F = join >> SHAKE256 >> take >> split
@@ -754,7 +757,9 @@ G = join >> SHAKE256 >> take >> split
 H : [msg_bytes + 6*Np + msg_bytes][8] -> [crypto_bytes][8]
 H = join >> SHAKE256 >> take >> split
 
+//
 // PKE (Algorithm 1)
+//
 
 PKE_Gen : [Nsk3][8] -> ([6*Np][8], [Nsk3][8]) // The "input" here should be chosen uniformly at random from K_3.
 PKE_Gen sk3 = (pk3, sk3)
@@ -773,11 +778,16 @@ PKE_Dec sk3 (c0, c1) = m
             h   = F j
             m   = h ^ c1
 
-pkeTest : ([Nsk3][8], [Nsk2][8], [msg_bytes][8]) -> Bit
-property pkeTest (sk3, sk2, m) = (plaintext == m)
-    where   pk3 = (PKE_Gen sk3).0
-            ciphertext = PKE_Enc pk3 m sk2
-            plaintext = PKE_Dec sk3 ciphertext
+pkeTest : {n} (fin n) => [n] -> Bit
+property pkeTest seed   = (plaintext == m)
+    where
+            ranBytes    = pseudoranBytes`{Nsk3 + Nsk2 + msg_bytes} seed
+            sk3         = take`{Nsk3} ranBytes
+            pk3         = (PKE_Gen sk3).0
+            sk2         = take`{Nsk2} $ drop`{Nsk3} ranBytes
+            m           = take`{msg_bytes} $ drop`{Nsk3 + Nsk2} ranBytes
+            ciphertext  = PKE_Enc pk3 m sk2
+            plaintext   = PKE_Dec sk3 ciphertext
     
 
 // KEM (Algorithm 2)
@@ -799,9 +809,22 @@ KEM_Decaps (s, sk3, pk3) (c0, c1) = K
             c0' = isogen_2 r'
             K   = H $ m # c0 # c1
             m   = if c0' == c0 then m' else s
-            
+
+kemTest : {n} (fin n) => [n] -> Bit
+property kemTest seed = (K == K')
+    where
+            ranBytes    = pseudoranBytes`{Nsk3 + msg_bytes + msg_bytes} seed
+            sk3         = take`{Nsk3} ranBytes
+            s           = take`{msg_bytes} $ drop`{Nsk3} ranBytes
+            pk3         = (KEM_KeyGen sk3 s).2
+            m           = take`{msg_bytes} $ drop`{Nsk3 + msg_bytes} ranBytes
+            (c, K)      = KEM_Encaps pk3 m
+            K'          = KEM_Decaps (s, sk3, pk3) c
            
 // Using SHAKE256, get some pseudorandomness.
+
+pseudoranBytes : {m, n} (fin n, fin m) => [n] -> [m][8]
+pseudoranBytes s = split $ take $ SHAKE256 s
 
 RandomK3 : {n} (fin n) => [n] -> [Nsk3][8]
 RandomK3 s = take`{Nsk3} $ drop`{0} s'
