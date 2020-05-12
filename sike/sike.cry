@@ -38,10 +38,8 @@ parameter
     yP20 : Integer
     yP21 : Integer
 
-    /*
     xR20 : Integer
     xR21 : Integer
-    */
     
     xQ30 : Integer
     xQ31 : Integer
@@ -55,12 +53,33 @@ parameter
     yP30 : Integer
     yP31 : Integer
     
-    /*
-        //These are used in compressed versions, but not the reference implementation.
-        xR30 : Integer
-        xR31 : Integer
-    */
+    xR30 : Integer
+    xR31 : Integer
 
+//
+// Assemble public generator points.
+//
+
+xP2 = [fromInteger xP20, fromInteger xP21] : Fp2
+yP2 = [fromInteger yP20, fromInteger yP21] : Fp2
+P2  = mkAffine xP2 yP2
+
+xR2 = [fromInteger xR20, fromInteger xR21] : Fp2
+
+xQ2 = [fromInteger xQ20, fromInteger xQ21] : Fp2
+yQ2 = [fromInteger yQ20, fromInteger yQ21] : Fp2
+Q2  = mkAffine xQ2 yQ2
+
+
+xP3 = [fromInteger xP30, fromInteger xP31] : Fp2
+yP3 = [fromInteger yP30, fromInteger yP31] : Fp2
+P3  = mkAffine xP3 yP3
+
+xR3 = [fromInteger xR30, fromInteger xR31] : Fp2
+
+xQ3 = [fromInteger xQ30, fromInteger xQ31] : Fp2
+yQ3 = [fromInteger yQ30, fromInteger yQ31] : Fp2
+Q3  = mkAffine xQ3 yQ3
 
 //
 // Functional programming operators.
@@ -91,7 +110,7 @@ ostoi = reverse >> join >> toInteger
 
 ostofp : [Np][8] -> Fp
 ostofp xs = if (a < 0) || (a > `p - 1)
-            then undefined
+            then error "Octet string does not represent a member of F_p."
             else fromInteger a
                 where a = ostoi xs
 
@@ -150,7 +169,7 @@ fpMultL xs = ys ! 0
 
 fpMultInv : Fp -> Fp
 fpMultInv a = if a == 0
-              then undefined
+              then error "Cannot divide by zero!"
               else a'
                 where   a' = fromInteger (eea (fromZ a) `p).x
 
@@ -166,7 +185,7 @@ fpPow a n = bs ! 0
     where   bs = [1] # [ if bit then fpMult a (fpSquare b) else fpSquare b | b <- bs | bit <- n ]
 
 fpSqrt : Fp -> Fp
-fpSqrt a =  if fpQuadNonRes a then  undefined
+fpSqrt a =  if fpQuadNonRes a then error "Not a quadratic residue in Fp!"
             else    if r % 2 == 0
                     then r
                     else -r
@@ -175,7 +194,7 @@ fpSqrt a =  if fpQuadNonRes a then  undefined
 fpQuadNonRes : Fp -> Bit
 fpQuadNonRes a = jacobi (fromZ a) `p == -1
     where jacobi m n =  if (n < 0) || (n % 2 == 0) 
-                        then undefined
+                        then error "Jacobi symbol not defined!"
                         |  (eea m' n).d != 1 
                         then 0
                         |  m' % 2 == 0 
@@ -194,7 +213,7 @@ fpQuadNonRes a = jacobi (fromZ a) `p == -1
                                                 else 1
                                             
                                 val2 x      =   if x == 0
-                                                then undefined
+                                                then error "Valuation of 0 not defined."
                                                 else    if x % 2 == 1
                                                         then 0
                                                         else 1 + val2 (x / 2)
@@ -261,7 +280,7 @@ fp2MultL xs = ys ! 0
     where ys = [lift 1] # [fp2Mult x y | x <- xs | y <- ys ]
 
 fp2MultInv : Fp2 -> Fp2
-fp2MultInv a = if a == zero then undefined else [a0', a1']
+fp2MultInv a = if a == zero then error "Cannot divide by zero!" else [a0', a1']
     where   [a0', a1']  = [fpMult a0 (fpMultInv absVal), fpMult (fpAddInv a1) (fpMultInv absVal)]
             [a0, a1]    = a
             absVal      = norm a
@@ -308,7 +327,7 @@ mkAffine x' y' = { affine = {x = x', y = y'}, isAffine = True }
 type MontgomeryCurve = { A: Fp2, B: Fp2}
 
 mkMC : Fp2 -> Fp2 -> MontgomeryCurve
-mkMC a b = if discrim == zero then undefined else {A = a, B = b}
+mkMC a b = if discrim == zero then error "Discriminant must not be zero!" else {A = a, B = b}
     where   discrim = fp2Mult b (fp2Subt (fp2Square a) (lift (fromInteger 4)))
 
 verifyPoint : MontgomeryCurve -> EllipticPoint -> Bit
@@ -326,22 +345,40 @@ verifyPoint C P =  if ~P.isAffine
 
 // Algorithm 25
 xDBL : MontgomeryCurve -> EllipticPoint -> EllipticPoint
-xDBL C P =      if ~P.isAffine
-                then zero
-                |  P == xNEGATE C P
-                then zero
-                else mkAffine x2P y2P
-                    where   xP = P.affine.x
-                            yP = P.affine.y
-                            x2P = fp2Subt (fp2MultL [C.B, lambda, lambda]) (fp2AddL [xP, xP, C.A])
-                            y2P = fp2Subt (fp2Mult lambda (fp2Subt xP x2P)) yP
-                            lambda = fp2Div lambda_top lambda_bottom
-                            lambda_top = fp2AddL [xPs, xPs, xPs, aXP, aXP, lift 1]
-                            xPs = fp2Square xP
-                            aXP = fp2Mult C.A xP
-                            lambda_bottom = fp2Add byP byP
-                            byP = fp2Mult C.B yP
-
+xDBL C P =  if ~P.isAffine
+            then zero
+            |  P == xNEGATE C P
+            then zero
+            else mkAffine x2P y2P
+                where   xP  = P.affine.x
+                        yP  = P.affine.y
+                        t3  = fp2Square xP
+                        t4  = fp2Doub t3
+                        t5  = lift 1
+                        t6  = fp2Add t3 t4
+                        t7  = fp2Mult C.A xP
+                        t8  = fp2Doub t7
+                        t9  = fp2Add t6 t8
+                        t10 = fp2Add t9 t5
+                        t11 = fp2Mult C.B yP
+                        t12 = fp2Doub t11
+                        t13 = fp2MultInv t12
+                        t14 = fp2Mult t10 t13
+                        t15 = fp2Square t14
+                        t16 = fp2Mult C.B t15
+                        t17 = fp2Subt t16 C.A
+                        t18 = fp2Subt t17 xP
+                        t19 = fp2Subt t18 xP
+                        t20 = fp2Mult t14 t15
+                        t21 = fp2Mult C.B t20
+                        t22 = fp2Add t21 yP
+                        t23 = fp2Doub xP
+                        t24 = fp2Add t23 xP
+                        t25 = fp2Add t24 C.A
+                        t26 = fp2Mult t25 t14
+                        t27 = fp2Subt t26 t22
+                        x2P = t19
+                        y2P = t27
 
 // Algorithm 26
 xDBLe : {n} (fin n) => [n] -> MontgomeryCurve -> EllipticPoint -> EllipticPoint
@@ -351,7 +388,7 @@ xDBLe e C P = ys @ e
 
 xNEGATE : MontgomeryCurve -> EllipticPoint -> EllipticPoint
 xNEGATE C P =   if ~P.isAffine
-                then zero
+                then P
                 else {affine = {x = xP, y = fp2AddInv yP}, isAffine = True}
                     where   xP = P.affine.x
                             yP = P.affine.y
@@ -366,16 +403,32 @@ xADD C P Q =    if ~P.isAffine
                 then xDBL C P
                 |  P == (xNEGATE C Q)
                 then zero
-                else mkAffine xPpQ yPpQ
-                    where   xP = P.affine.x
-                            yP = P.affine.y
-                            xQ = Q.affine.x
-                            yQ = Q.affine.y
-                            xPpQ = fp2Subt (fp2MultL [C.B, lambda, lambda]) (fp2AddL [xP, xQ, C.A])
-                            yPpQ = fp2Subt (fp2Mult lambda (fp2Subt xP xPpQ)) yP
-                            lambda = fp2Div lambda_top lambda_bottom
-                            lambda_top = fp2Subt yQ yP
-                            lambda_bottom = fp2Subt xQ xP
+                else mkAffine xPQ yPQ
+                    where   xP  = P.affine.x
+                            yP  = P.affine.y
+                            xQ  = Q.affine.x
+                            yQ  = Q.affine.y
+                            t9  = fp2Subt yQ yP
+                            t10 = fp2Subt xQ xP
+                            t11 = fp2MultInv t10
+                            t12 = fp2Mult t9 t11
+                            t13 = fp2Square t12
+                            t14 = fp2Doub xP
+                            t15 = fp2Add t14 xQ
+                            t16 = fp2Add t15 C.A
+                            t17 = fp2Mult t16 t12
+                            t18 = fp2Mult t12 t13
+                            t19 = fp2Mult C.B t18
+                            t20 = fp2Add t19 yP
+                            t21 = fp2Subt t17 t20
+                            t22 = fp2Mult C.B t13
+                            t23 = fp2Subt t22 C.A
+                            t24 = fp2Subt t23 xP
+                            t25 = fp2Subt t24 xQ
+                            xPQ = t25
+                            yPQ = t21
+
+
 
 // Algorithm 28
 xTPL : MontgomeryCurve -> EllipticPoint -> EllipticPoint
@@ -393,12 +446,25 @@ double_and_add C P n = bs ! 0
 
 // Algorithm 31
 j_inv : MontgomeryCurve ->  Fp2
-j_inv C = fp2Div numerator denominator
-            where   numerator = fp2Scale asm3c (256 : [9])
-                    asm3c = fp2Pow (fp2Subt asquare (lift 3)) (3 : [2])
-                    denominator = fp2Subt asquare (lift 4)
-                    asquare = fp2Square C.A
-
+j_inv C = j
+    where   t1  = fp2Square C.A
+            t2  = lift 3
+            t3  = fp2Subt t1 t2
+            t4  = fp2Square t3
+            t5  = fp2Mult t3 t4
+            t6  = fp2Doub t5
+            t7  = fp2Doub t6
+            t8  = fp2Doub t7
+            t9  = fp2Doub t8
+            t10 = fp2Doub t9
+            t11 = fp2Doub t10
+            t12 = fp2Doub t11
+            t13 = fp2Doub t12
+            t14 = lift 4
+            t15 = fp2Subt t1 t14
+            t16 = fp2MultInv t15
+            t17 = fp2Mult t13 t16
+            j   = t17
 
 //
 // Isogenies.
@@ -629,25 +695,23 @@ iso_3_e_step k y = {S = S', C = C', Ps = Ps'}
             C' = curve_3_iso xT y.C
             Ps' = map (eval_3_iso xT) y.Ps
 
-
 // Algorithm 10
-get_A : [3]Fp2 -> MontgomeryCurve
-get_A [xP, xQ, xR] =    if sym3 == zero then undefined else mkMC (fp2Subt fraction sym1) (lift 1)
-                        where   sym0 = (lift 1)
-                                sym1 = fp2AddL [xP, xQ, xR]
-                                sym2 = fp2AddL [fp2Mult xP xQ, fp2Mult xP xR, fp2Mult xQ xR]
-                                sym3 = fp2MultL [xP, xQ, xR]
-                                fraction = fp2Div numerator denominator
-                                numerator = fp2Square $ fp2Subt sym0 sym2
-                                denominator = (fp2Doub >> fp2Doub) sym3
-
-get_Y : MontgomeryCurve -> Fp2 -> Fp2
-get_Y (C : MontgomeryCurve) xP = yP
-    where   (a, b) = (C.A, C.B)
-            xPSquared       = fp2Square xP
-            xPCubed         = fp2Mult xP xPSquared
-            yPSquared       = fp2Div (fp2AddL [xPCubed, fp2Mult a xPSquared, xP]) b
-            yP              = fp2Sqrt yPSquared
+get_A : [3]Fp2 -> Fp2
+get_A [xP, xQ, xR] = A
+    where   t1  = fp2Add xP xQ
+            t2  = fp2Mult xP xQ
+            t3  = fp2Mult xR t1
+            t4  = fp2Add t3 t2
+            t5  = fp2Mult t2 xR
+            t6  = fp2Subt t4 (lift 1)
+            t7  = fp2Doub t5
+            t8  = fp2Add t1 xR
+            t9  = fp2Doub t7
+            t10 = fp2Square t6
+            t11 = fp2MultInv t9
+            t12 = fp2Mult t10 t11
+            t13 = fp2Subt t12 t8
+            A   = t13
 
 // Algorithm 40
 get_xR : MontgomeryCurve -> EllipticPoint -> EllipticPoint -> Fp2
@@ -656,37 +720,27 @@ get_xR C P Q = (xADD C P $ xNEGATE C Q).affine.x
 // Algorithm 41
 get_yP_yQ_A_B : [6*Np][8] -> ([2]Fp2, MontgomeryCurve)
 get_yP_yQ_A_B pk = ([yP, yQ'], C)
-    where   
-            [xP, xQ, xR]    = ostopk pk
-            C               = get_A [xP, xQ, xR]
-            [yP, yQ]        = map (get_Y C) [xP, xQ]
-            P               = mkAffine xP yP
-            Q               = mkAffine xQ yQ
-            yQ'             = if (get_xR C P Q) != xR then fp2AddInv yQ else yQ
-    
-
-//
-// Assemble public generator points.
-//
-
-xP2 = ostofp2 $ (itoos`{Np} xP20) # (itoos`{Np} xP21)
-yP2 = ostofp2 $ (itoos`{Np} yP20) # (itoos`{Np} yP21)
-P2  = mkAffine xP2 yP2
-
-// xR2 = ostofp2 $ (itoos`{Np} xR20) # (itoos`{Np} xR21)
-
-xQ2 = ostofp2 $ (itoos`{Np} xQ20) # (itoos`{Np} xQ21)
-yQ2 = ostofp2 $ (itoos`{Np} yQ20) # (itoos`{Np} yQ21)
-Q2  = mkAffine xQ2 yQ2
-
-
-xP3 = ostofp2 $ (itoos`{Np} xP30) # (itoos`{Np} xP31)
-yP3 = ostofp2 $ (itoos`{Np} yP30) # (itoos`{Np} yP31)
-P3 =  mkAffine xP3 yP3
-
-xQ3 = ostofp2 $ (itoos`{Np} xQ30) # (itoos`{Np} xQ31)
-yQ3 = ostofp2 $ (itoos`{Np} yQ30) # (itoos`{Np} yQ31)
-Q3 =  mkAffine xQ3 yQ3
+    where   [xP, xQ, xR] = ostopk pk
+            t1  = get_A [xP, xQ, xR]
+            t2  = lift 1
+            t3  = fp2Square xP
+            t4  = fp2Mult xP t3
+            t5  = fp2Mult t1 t3
+            t6  = fp2Add t4 t5
+            t7  = fp2Add t6 xP
+            t8  = fp2Sqrt t7
+            t9  = fp2Square xQ
+            t10 = fp2Mult xQ t9
+            t11 = fp2Mult t1 t9
+            t12 = fp2Add t10 t11
+            t13 = fp2Add t12 xQ
+            t14 = fp2Sqrt t13        
+            yP  = t8
+            yQ  = t14
+            C   = mkMC t1 t2
+            P   = mkAffine xP yP
+            Q   = mkAffine xQ yQ
+            yQ' = if (get_xR C P Q) != xR then fp2AddInv yQ else yQ
 
 //
 // isogen_l and isoex_l for l in {2, 3}
@@ -827,16 +881,28 @@ pseudoranBytes : {m, n} (fin n, fin m) => [n] -> [m][8]
 pseudoranBytes s = split $ take $ SHAKE256 s
 
 RandomK3 : {n} (fin n) => [n] -> [Nsk3][8]
-RandomK3 s = take`{Nsk3} $ drop`{0} s'
-    where s' = split $ SHAKE256 s
+RandomK3 = pseudoranBytes
 
 RandomK2 : {n} (fin n) => [n] -> [Nsk2][8]
-RandomK2 s = take`{Nsk2} $ drop`{Nsk3} s'
-    where s' = split $ SHAKE256 s
+RandomK2 = pseudoranBytes
 
 RandomMessage : {n} (fin n) => [n] -> [msg_bytes][8]
-RandomMessage s = take`{msg_bytes} $ drop`{Nsk3 + Nsk2} s'
-    where s' = split $ SHAKE256 s
+RandomMessage = pseudoranBytes
 
-randomInit : {n} (fin n) => [n] -> ([Nsk3][8], [Nsk2][8], [msg_bytes][8])
-randomInit s = (RandomK3 s, RandomK2 s, RandomMessage s)
+//
+// Deques
+//
+
+type Deque n a = [n]a
+
+push : {n, a} (a, Deque n a) -> Deque (1 + n) a
+push (x, xs) = [x] # xs
+
+pop : {n, a} (n >= 1) => Deque n a -> (a, Deque (n - 1) a)
+pop xs = (head xs, tail xs)
+
+property poppush z = pop (push z) == z
+
+pull : {n, a} (fin n, n >= 1) => Deque n a -> (a, Deque (n - 1) a)
+pull xs = (head xs', reverse (tail xs'))
+    where xs' = reverse xs
