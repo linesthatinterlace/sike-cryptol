@@ -13,7 +13,7 @@ parameter
     type p  : # // p must be of the form 2^(e2)3^(e3) - 1
     type constraint (fin p, p % 4 == 3, p>=7)
     type e2 : #
-    type constraint (fin e2, e2 >=4, e2 % 8 == 0) // Need >=4 for type reasons - in practice it will be bigger than this!
+    type constraint (fin e2, e2 >=4) // Need >=4 for type reasons - in practice it will be bigger than this!
     
     type e3 : #
     type constraint (fin e3, e3 >=1) // Need >=1 for type reasons - in practice it will be bigger than this!
