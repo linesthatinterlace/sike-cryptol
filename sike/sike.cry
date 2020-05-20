@@ -18,6 +18,13 @@ parameter
     type e3 : #
     type constraint (fin e3, e3 >=1) // Need >=1 for type reasons - in practice it will be bigger than this!
     
+    type Np   : # // Np   == lg2 p /^ 8
+    type constraint (fin Np)
+    type Nsk2 : # // Nsk2 == e2 /^ 8
+    type constraint (fin Nsk2)    
+    type Nsk3 : # // Nsk3 == (lg2 (3^^e3) - 1) /^ 8 (This condition is not imposed because it breaks the typechecker.)
+    type constraint (fin Nsk3)
+    
     type crypto_bytes : #
     type constraint (fin crypto_bytes)
 
@@ -97,9 +104,7 @@ infixr 1 $
 // Data and value types.
 //
 
-type Np = lg2 p /^ 8
-type Nsk2 = e2 /^ 8
-type Nsk3 = lg2 (3^^e3) / 8
+
 
 // 
 // Data type conversions.
@@ -815,66 +820,57 @@ H = join >> SHAKE256 >> take >> split
 // PKE (Algorithm 1)
 //
 
-PKE_Gen : [Nsk3][8] -> ([6*Np][8], [Nsk3][8]) // The "input" here should be chosen uniformly at random from K_3.
-PKE_Gen sk3 = (pk3, sk3)
+PKE_Gen : [Nsk3][8] -> [6*Np + Nsk3][8] // The "input" here should be chosen uniformly at random from K_3.
+PKE_Gen sk3 = pk3 # sk3
     where pk3 = isogen_3 sk3
 
-PKE_Enc : [6*Np][8] -> [msg_bytes][8] -> [Nsk2][8] -> ([6*Np][8], [msg_bytes][8]) // sk2 here should be chosen uniformly at random from K_2 if used for PKE.
-PKE_Enc pk3 m sk2 = (c0, c1)
+PKE_Enc : [6*Np][8] -> [msg_bytes][8] -> [Nsk2][8] -> [6*Np + msg_bytes][8] // sk2 here should be chosen uniformly at random from K_2 if used for PKE.
+PKE_Enc pk3 m sk2 = c0 # c1
     where   c0  = isogen_2 sk2
             j   = isoex_2 pk3 sk2
             h   = F j
             c1  = h ^ m
 
-PKE_Dec : [Nsk3][8] -> ([6*Np][8], [msg_bytes][8]) -> [msg_bytes][8]
-PKE_Dec sk3 (c0, c1) = m
-    where   j   = isoex_3 c0 sk3
+PKE_Dec : [Nsk3][8] -> [6*Np + msg_bytes][8] -> [msg_bytes][8]
+PKE_Dec sk3 ct = m
+    where   (c0 : [6*Np][8]) # (c1 : [msg_bytes][8]) = ct
+            j   = isoex_3 c0 sk3
             h   = F j
-            m   = h ^ c1
-
-pkeTest : {n} (fin n) => [n] -> Bit
-property pkeTest seed   = (plaintext == m)
-    where
-            ranBytes    = pseudoranBytes`{Nsk3 + Nsk2 + msg_bytes} seed
-            sk3         = take`{Nsk3} ranBytes
-            pk3         = (PKE_Gen sk3).0
-            sk2         = take`{Nsk2} $ drop`{Nsk3} ranBytes
-            m           = take`{msg_bytes} $ drop`{Nsk3 + Nsk2} ranBytes
-            ciphertext  = PKE_Enc pk3 m sk2
-            plaintext   = PKE_Dec sk3 ciphertext
-    
+            m   = h ^ c1  
 
 // KEM (Algorithm 2)
 
-KEM_KeyGen : [Nsk3][8] -> [msg_bytes][8] -> ([msg_bytes][8], [Nsk3][8], [6*Np][8]) // sk3 and s are random.
-KEM_KeyGen sk3 s = (s, sk3, pk3)
-    where pk3 = isogen_3 sk3
+KEM_KeyGen : [Nsk3][8] -> [msg_bytes][8] -> [msg_bytes + Nsk3 + 6*Np][8] // sk3 and s are random.
+KEM_KeyGen sk3 s    = s # sk3 # pk3
+    where   pk3     = isogen_3 sk3
     
-KEM_Encaps : [6*Np][8] -> [msg_bytes][8] -> (([6*Np][8], [msg_bytes][8]), [crypto_bytes][8]) // m is random
-KEM_Encaps pk3 m = (c, K)
-    where   r   = G $ m # pk3
-            c   = PKE_Enc pk3 m r
-            K   = H $ m # c.0 # c.1
+KEM_Encaps : [msg_bytes][8] -> [6*Np][8] -> ([6*Np + msg_bytes][8], [crypto_bytes][8]) // m is random
+KEM_Encaps m pk3    = (ct, ss)
+    where   r       = G $ m # pk3
+            ct      = PKE_Enc pk3 m r
+            ss      = H $ m # ct
 
-KEM_Decaps : ([msg_bytes][8], [Nsk3][8], [6*Np][8]) -> ([6*Np][8], [msg_bytes][8]) -> [crypto_bytes][8]
-KEM_Decaps (s, sk3, pk3) (c0, c1) = K
-    where   m'  = PKE_Dec sk3 (c0, c1)
+KEM_Decaps : [msg_bytes + Nsk3 + 6*Np][8] -> [6*Np + msg_bytes][8] -> [crypto_bytes][8]
+KEM_Decaps sk ct    = ss
+    where   (s : [msg_bytes][8]) # (sk3 : [Nsk3][8]) # (pk3 : [6*Np][8]) = sk
+            m'  = PKE_Dec sk3 ct
             r'  = G $ m' # pk3
+            c0 = take`{6*Np} ct
             c0' = isogen_2 r'
-            K   = H $ m # c0 # c1
+            ss  = H $ m # ct
             m   = if c0' == c0 then m' else s
 
-kemTest : {n} (fin n) => [n] -> Bit
-property kemTest seed = (K == K')
-    where
-            ranBytes    = pseudoranBytes`{Nsk3 + msg_bytes + msg_bytes} seed
-            sk3         = take`{Nsk3} ranBytes
-            s           = take`{msg_bytes} $ drop`{Nsk3} ranBytes
-            pk3         = (KEM_KeyGen sk3 s).2
-            m           = take`{msg_bytes} $ drop`{Nsk3 + msg_bytes} ranBytes
-            (c, K)      = KEM_Encaps pk3 m
-            K'          = KEM_Decaps (s, sk3, pk3) c
-           
+katTest: KatReq -> Bit
+katTest req = test1 /\ test2 /\ test3 /\ test4 /\ traceVal "Test 4 passed! All passed" True
+    where   (s : [msg_bytes][8]) # (sk3 : [Nsk3][8]) # (pk3 : [6*Np][8]) = req.sk
+            test1   = pk3 == req.pk
+            test2   = traceVal "Test 1 passed!" (KEM_KeyGen sk3 s == req.sk)
+            m = PKE_Dec sk3 req.ct
+            test3   = traceVal "Test 2 passed!" (KEM_Encaps m pk3 == (req.ct, req.ss))
+            test4   = traceVal "Test 3 passed!" (KEM_Decaps req.sk req.ct == req.ss)
+
+type KatReq = { pk: [6*Np][8], sk : [msg_bytes + Nsk3 + 6*Np][8], ct : [6*Np + msg_bytes][8], ss : [crypto_bytes][8]}  
+
 // Using SHAKE256, get some pseudorandomness.
 
 pseudoranBytes : {m, n} (fin n, fin m) => [n] -> [m][8]
@@ -906,3 +902,5 @@ property poppush z = pop (push z) == z
 pull : {n, a} (fin n, n >= 1) => Deque n a -> (a, Deque (n - 1) a)
 pull xs = (head xs', reverse (tail xs'))
     where xs' = reverse xs
+    
+
