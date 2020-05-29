@@ -861,15 +861,14 @@ KEM_Decaps sk ct    = ss
             m   = if c0' == c0 then m' else s
 
 katTest: KatReq -> Bit
-katTest req = test1 /\ test2 /\ test3 /\ test4 /\ traceVal "Test 4 passed! All passed" True
+katTest req = test1 /\ test2 /\ test3 /\ test4 /\ traceVal "Test 4 passed! All passed!" True
     where   (s : [msg_bytes][8]) # (sk3 : [Nsk3][8]) # (pk3 : [6*Np][8]) = req.sk
             test1   = pk3 == req.pk
             test2   = traceVal "Test 1 passed!" (KEM_KeyGen sk3 s == req.sk)
-            m = PKE_Dec sk3 req.ct
-            test3   = traceVal "Test 2 passed!" (KEM_Encaps m pk3 == (req.ct, req.ss))
+            test3   = traceVal "Test 2 passed!" (KEM_Encaps req.m pk3 == (req.ct, req.ss))
             test4   = traceVal "Test 3 passed!" (KEM_Decaps req.sk req.ct == req.ss)
 
-type KatReq = { pk: [6*Np][8], sk : [msg_bytes + Nsk3 + 6*Np][8], ct : [6*Np + msg_bytes][8], ss : [crypto_bytes][8]}  
+type KatReq = { pk: [6*Np][8], sk : [msg_bytes + Nsk3 + 6*Np][8], m: [msg_bytes][8], ct : [6*Np + msg_bytes][8], ss : [crypto_bytes][8]}  
 
 // Using SHAKE256, get some pseudorandomness.
 
