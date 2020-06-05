@@ -123,9 +123,6 @@ xor : {a, b} (fin a) => [a][b] -> [b]
 xor xs = xors ! 0
   where xors = [zero] # [ x ^ z | x <- xs | z <- xors ]
 
-property RC_correct i j =
-  (i:[8]) < 24 ==> (j:[8]) < 7 ==> RCs64@i!(2^^j - 1) == lfsr@(j + 7*i)
-
 lfsr : [inf]
 lfsr = [ p!0 | p <- ps ]
   where
@@ -133,13 +130,6 @@ lfsr = [ p!0 | p <- ps ]
     ps = [0x01] # [ pmod (pmult p 0b10) m | p <- ps ]
     m = <| x^^8 + x^^6 + x^^5 + x^^4 + 1 |>
 
-/* See https://keccak.team/files/Keccak-reference-3.0.pdf, Section 1.2 */
-property unflatten_correct x y z p =
-  x < 5 ==> y < 5 ==> z < (64:[12]) ==>
-  p@((5*y + x)*64 + z) == unflatten`{1600,64} p @ x @ y ! z
-
-property flatten_correct s =
-  unflatten`{1600,64} (flatten`{64} s) == s
 
 /** Splits a list of bits into bytes, using little-endian bit order. **/
 toBytes : {n} (fin n) => [8*n] -> [n][8]

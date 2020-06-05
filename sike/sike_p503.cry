@@ -1,7 +1,11 @@
 module sike_p503 = sike where
+    import KAT::KAT_434
     type p              = 0x004066F541811E1E6045C6BDDA77A4D01B9BF6C87B7E7DAF13085BDA2211E7A0ABFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     type e2             = 250
     type e3             = 159
+    type Np             = 63
+    type Nsk2           = 32
+    type Nsk3           = 32
     type crypto_bytes   = 24
     type msg_bytes      = 24
     startingCurve       = { A = [(6 : Z p), zero], B = [(1 : Z p), zero]}

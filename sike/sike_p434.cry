@@ -1,4 +1,5 @@
 module sike_p434 = sike where
+    import KAT::KAT_374
     type p              = 0x0002341F271773446CFC5FD681C520567BC65C783158AEA3FDC1767AE2FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     type e2             = 216
     type e3             = 137

@@ -1,7 +1,11 @@
 module sike_p751 = sike where
+    import KAT::KAT_644
     type p              = 0x6FE5D541F71C0E12909F97BADC668562B5045CB25748084E9867D6EBE876DA959B1A13F7CC76E3EC968549F878A8EEAFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     type e2             = 372
     type e3             = 239
+    type Np             = 94
+    type Nsk2           = 47
+    type Nsk3           = 48
     type crypto_bytes   = 32
     type msg_bytes      = 32
     startingCurve       = { A = [(6 : Z p), zero], B = [(1 : Z p), zero]}
