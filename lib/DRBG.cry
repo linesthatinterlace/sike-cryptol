@@ -1,0 +1,32 @@
+module lib::DRBG where
+import lib::AES
+
+//
+// Deterministic Random Number Generator (CTR_AES)
+//
+
+type DRBGState = { Key : [256], V : [128], reseed_counter : Integer}
+
+drbgInit : [384] -> DRBGState
+drbgInit entropy_input = aes256CTRDRBGUpdate zero entropy_input
+
+aes256CTRDRBGUpdate : DRBGState -> [384] -> DRBGState
+aes256CTRDRBGUpdate drbgInput provided_data = { Key = output_key , V = output_V, reseed_counter = drbgInput.reseed_counter + 1}
+    where   result      = provided_data ^ ((drbgGenerateInternal drbgInput).0)
+            output_key  = take result
+            output_V    = drop result
+
+drbgGenerateInternal : {blocks} (fin blocks, 1<=blocks, blocks <= 64) => DRBGState -> ([128*blocks], DRBGState)
+drbgGenerateInternal drbgInput    = (result, { drbgInput | V = drbgInput.V + `blocks })
+    where  result   = join [aesEncrypt(drbgInput.V + i, drbgInput.Key) | i <- [1 .. blocks]]
+
+
+drbgGenerate : {blocks} (fin blocks, 1 <= blocks, blocks <= 64 ) => DRBGState -> ([128*blocks], DRBGState)
+drbgGenerate drbgInput = (result, drbgOutput)
+    where   (result', drbgInput') = drbgGenerateInternal`{blocks} drbgInput
+            result                = take result'
+            drbgOutput  = aes256CTRDRBGUpdate drbgInput' zero
+
+randomBytes : {bytes} (fin bytes, 1 <= bytes, bytes <= 1024) => DRBGState -> ([bytes][8], DRBGState)
+randomBytes drbgInput       = (groupBy (take output), state) 
+    where (output, state)   = drbgGenerate`{bytes /^ 16} drbgInput
