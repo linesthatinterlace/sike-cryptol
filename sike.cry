@@ -24,11 +24,11 @@ parameter
     type constraint (fin e3, e3 >=1) // Need >=1 for type reasons - in practice it will be bigger than this!
     
     type Np   : # // Np   == lg2 p /^ 8
-    type constraint (fin Np)
+    type constraint (fin Np, Np*8 >= width p, Np >= 1)
     type Nsk2 : # // Nsk2 == e2 /^ 8
-    type constraint (fin Nsk2, 1<= Nsk2, Nsk2 <= 1024 )    
+    type constraint (fin Nsk2, 1<= Nsk2, Nsk2 <= 1024)    
     type Nsk3 : # // Nsk3 == (lg2 (3^^e3) - 1) /^ 8
-    type constraint (fin Nsk3, 8 <= Nsk3, Nsk3 <= 1024)
+    type constraint (fin Nsk3, 8 <= Nsk3, Nsk3 <= 1024, 8*Nsk3 >= width (2 ^^ (lg2 (3 ^^ e3) - 1)))
     
     type crypto_bytes : #
     type constraint (fin crypto_bytes)
@@ -38,59 +38,59 @@ parameter
 
     startingCurve : MontgomeryCurve
     
-    xQ20 : Integer
-    xQ21 : Integer
+    xQ20 : Fp
+    xQ21 : Fp
     
-    yQ20 : Integer
-    yQ21 : Integer
+    yQ20 : Fp
+    yQ21 : Fp
     
-    xP20 : Integer
-    xP21 : Integer
+    xP20 : Fp
+    xP21 : Fp
     
-    yP20 : Integer
-    yP21 : Integer
+    yP20 : Fp
+    yP21 : Fp
 
-    xR20 : Integer
-    xR21 : Integer
+    xR20 : Fp
+    xR21 : Fp
     
-    xQ30 : Integer
-    xQ31 : Integer
+    xQ30 : Fp
+    xQ31 : Fp
     
-    yQ30 : Integer
-    yQ31 : Integer
+    yQ30 : Fp
+    yQ31 : Fp
     
-    xP30 : Integer
-    xP31 : Integer
+    xP30 : Fp
+    xP31 : Fp
     
-    yP30 : Integer
-    yP31 : Integer
+    yP30 : Fp
+    yP31 : Fp
     
-    xR30 : Integer
-    xR31 : Integer
+    xR30 : Fp
+    xR31 : Fp
 
 //
 // Public generator points
 //
 
-xP2 = [fromInteger xP20, fromInteger xP21] : Fp2
-yP2 = [fromInteger yP20, fromInteger yP21] : Fp2
+xP2 = [xP20, xP21] : Fp2
+yP2 = [yP20, yP21] : Fp2
 P2  = mkAffine xP2 yP2
 
-xR2 = [fromInteger xR20, fromInteger xR21] : Fp2
+xR2 = [xR20, xR21] : Fp2
 
-xQ2 = [fromInteger xQ20, fromInteger xQ21] : Fp2
-yQ2 = [fromInteger yQ20, fromInteger yQ21] : Fp2
+xQ2 = [xQ20, xQ21] : Fp2
+yQ2 = [yQ20, yQ21] : Fp2
 Q2  = mkAffine xQ2 yQ2
 
 
-xP3 = [fromInteger xP30, fromInteger xP31] : Fp2
-yP3 = [fromInteger yP30, fromInteger yP31] : Fp2
+xP3 = [xP30, xP31] : Fp2
+yP3 = [yP30, yP31] : Fp2
 P3  = mkAffine xP3 yP3
 
-xR3 = [fromInteger xR30, fromInteger xR31] : Fp2
+xR3 = [xR30, xR31] : Fp2
 
-xQ3 = [fromInteger xQ30, fromInteger xQ31] : Fp2
-yQ3 = [fromInteger yQ30, fromInteger yQ31] : Fp2
+xQ3 = [xQ30, xQ31] : Fp2
+yQ3 = [yQ30, yQ31] : Fp2
 Q3  = mkAffine xQ3 yQ3
 
 
@@ -98,13 +98,13 @@ Q3  = mkAffine xQ3 yQ3
 // Data type conversions.
 // 
 
-ostoi : {mlen} (fin mlen) => [mlen][8] -> Integer
-ostoi = reverse ~~> join ~~> toInteger
+ostoi : {mlen} (fin mlen) => [mlen][8] -> [mlen*8]
+ostoi = reverse ~~> join
 
 ostofp : [Np][8] -> Fp
-ostofp xs = if (a < 0) || (a > `p - 1)
+ostofp xs = if (a > `p - 1)
             then error "Octet string does not represent a member of F_p."
-            else fromInteger a
+            else drop a
                 where a = ostoi xs
 
 ostofp2 : [2*Np][8] -> Fp2
@@ -113,11 +113,11 @@ ostofp2 = split ~~> map ostofp
 ostopk : [6*Np][8] -> [3]Fp2
 ostopk = split ~~> map ostofp2
 
-itoos : {mlen} (fin mlen) => Integer -> [mlen][8]
-itoos = fromInteger ~~> split ~~> reverse
+itoos : {n, mlen} (fin n, fin mlen, 8*mlen >= n) => [n] -> [mlen][8]
+itoos x = (split ~~> reverse) (zero # x)
 
 fptoos : Fp -> [Np][8]
-fptoos = fromZ ~~> itoos
+fptoos = itoos
 
 fp2toos : Fp2 -> [2*Np][8]
 fp2toos = map fptoos ~~> join
@@ -134,23 +134,26 @@ pktoos = map fp2toos ~~> join
 // F_p
 //
 
-type Fp = Z p
+type Fp = [Np*8]       
+pBits = `p : [Np*8]
+
+fpMod : {n} (fin n) => [n + Np*8] -> Fp
+fpMod a = drop (a % (zero # pBits))
+
+fpCmp : Fp -> Fp -> Bit
+fpCmp a b = fpMod a == fpMod b
 
 fpAdd : Fp -> Fp -> Fp
-fpAdd a b = a + b
-
-fpAddL : {n} (fin n) => [n]Fp -> Fp
-fpAddL xs = ys ! 0
-    where ys = [fpAddUnit] # [fpAdd x y | x <- xs | y <- ys ]
-
-fpAddInv : Fp -> Fp
-fpAddInv a = -a
+fpAdd a b = fpMod <~ (0b0 # a) + (0b0 # b)
 
 fpAddUnit : Fp
-fpAddUnit = 0
+fpAddUnit = zero
 
 fpSubt : Fp -> Fp -> Fp
 fpSubt a b = fpAdd a (fpAddInv b)
+
+fpAddInv : Fp -> Fp
+fpAddInv a = fpMod <~ pBits - fpMod a
 
 fpDoub : Fp -> Fp
 fpDoub a = fpAdd a a
@@ -160,25 +163,19 @@ fpScale a n = bs ! 0
     where   bs = [fpAddUnit] # [ if bit then fpAdd a (fpDoub b) else fpDoub b | b <- bs | bit <- n ]
 
 fpMult : Fp -> Fp -> Fp
-fpMult a b = a*b
-
-fpMultL : {n} (fin n) => [n]Fp -> Fp
-fpMultL xs = ys ! 0
-    where ys = [fpMultUnit] # [fpMult x y | x <- xs | y <- ys ]
-
-p14 : [width (p + 1)]
-p14 = `(p + 1) / 4
-
-p34 : [width (p + 1)]
-p34 = p14 - 1
-
-fpMultInv : Fp -> Fp
-fpMultInv a =  if a == 0
-                then error "Cannot divide by zero!"
-                else fpPow a ( ( p34 << 2) + 1 )
+fpMult a b = fpMod <~ (fpAddUnit # a) * (fpAddUnit # b)
 
 fpMultUnit : Fp
-fpMultUnit = 1
+fpMultUnit = zero # 0b1
+
+fpPow : {n} (fin n) => Fp -> [n] -> Fp
+fpPow a n = bs ! 0
+    where   bs = [fpMultUnit] # [ if bit then fpMult a (fpSquare b) else fpSquare b | b <- bs | bit <- n ]
+
+fpMultInv : Fp -> Fp
+fpMultInv a =   if a == 0
+                then error "Cannot divide by zero!"
+                else fpPow a ( pBits - 2 )
 
 fpDiv : Fp -> Fp -> Fp
 fpDiv a b = fpMult a (fpMultInv b)
@@ -186,21 +183,18 @@ fpDiv a b = fpMult a (fpMultInv b)
 fpSquare : Fp -> Fp
 fpSquare a = fpMult a a
 
-fpPow : {n} (fin n) => Fp -> [n] -> Fp
-fpPow a n = bs ! 0
-    where   bs = [fpMultUnit] # [ if bit then fpMult a (fpSquare b) else fpSquare b | b <- bs | bit <- n ]
-
 fpSqrt : Fp -> Fp
-fpSqrt a =  if fpSquare r != a then error "Not a quadratic residue in Fp!"
-            else    if r % 2 == 0
+fpSqrt a =  if fpSquare r != fpMod a then error "Not a quadratic residue in Fp!"
+            else    if isEven r
                     then r
-                    else -r
-            where   r   = fpPow a p14
+                    else fpAddInv r
+            where   r   = fpPow a ( pBits + 1 >> 2 )
+                    isEven x = ~(x ! 0)
 
 fpQuadNonRes : Fp -> Bit
-fpQuadNonRes a = fpSquare r != a
-    where r   = fpPow a p14
-
+fpQuadNonRes a = fpSquare r != fpMod a
+    where r   = fpPow a ( pBits + 1 >> 2 )
+    
 
 //
 // F_(p^2)
@@ -219,10 +213,6 @@ fp2Add : Fp2 -> Fp2 -> Fp2
 fp2Add a b = [fpAdd a0 b0, fpAdd a1 b1]
     where   [a0, a1]    = a
             [b0, b1]    = b
-
-fp2AddL : {n} (fin n) => [n]Fp2 -> Fp2
-fp2AddL xs = ys ! 0
-    where ys = [fp2AddUnit] # [fp2Add x y | x <- xs | y <- ys ]
 
 fp2AddInv : Fp2 -> Fp2
 fp2AddInv a = [fpAddInv a0, fpAddInv a1]
@@ -245,10 +235,6 @@ fp2Mult : Fp2 -> Fp2 -> Fp2
 fp2Mult a b = [fpSubt (fpMult a0 b0) (fpMult a1 b1), fpAdd (fpMult a0 b1) (fpMult a1 b0)]
     where   [a0, a1]    = a
             [b0, b1]    = b
-
-fp2MultL : {n} (fin n) => [n]Fp2 -> Fp2
-fp2MultL xs = ys ! 0
-    where ys = [fp2MultUnit] # [fp2Mult x y | x <- xs | y <- ys ]
 
 fp2MultInv : Fp2 -> Fp2
 fp2MultInv a = if a == zero then error "Cannot divide by zero!" else [a0', a1']
@@ -273,23 +259,29 @@ fp2Sqrt : Fp2 -> Fp2
 fp2Sqrt a = if fpQuadNonRes (norm a)
             then error "Not a quadratic residue in Fp2!"
             else
-                if  a1 == zero
+                if  fpMod a1 == fpAddUnit
                 then    if      fpQuadNonRes a0
-                        then    [zero, fpSqrt (fpAddInv a0)]
-                        else    [fpSqrt a0, zero]
-                else    if      (alpha % 2 != zero)
+                        then    [fpAddUnit, fpSqrt (fpAddInv a0)]
+                        else    [fpSqrt a0, fpAddUnit]
+                else    if      (isEven alpha)
                         then    fp2AddInv [alpha, beta]
                         else    [alpha, beta]
                 where   [a0, a1]    = a
                         [alpha, beta]   =   if fpQuadNonRes z
                                             then [beta', fpAddInv alpha']
                                             else [alpha', beta']
-                        z               =   fpDiv (fpAdd a0 (fpSqrt (norm a) ) ) 2
-                        alpha'          =   fpPow z p14
-                        beta'           =   fpDiv (fpMult a1 (fpPow z p34) ) 2
+                        inv2            =   fpMultInv 2
+                        z               =   fpMult (fpAdd a0 (fpSqrt (norm a) ) ) inv2
+                        alpha'          =   fpPow z ( pBits + 1 >> 2 )
+                        beta'           =   fpMult (fpMult a1 (fpPow z ( pBits - 3 >> 2 )) ) inv2
+                        isEven x = ~(x ! 0)
 
 fp2QuadNonRes : Fp2 -> Bit
 fp2QuadNonRes = norm ~~> fpQuadNonRes
+
+fp2Mod : {n} (fin n) => [2][n + 8*Np] -> Fp2
+fp2Mod [a0, a1] = [fpMod a0, fpMod a1]
+
 
 ///
 /// Curve Operations
@@ -313,9 +305,17 @@ mkMC a b = if discrim == zero then error "Discriminant must not be zero!" else {
 verifyPoint : MontgomeryCurve -> EllipticPoint -> Bit
 verifyPoint C P =  if ~P.isAffine
             then True
-            else fp2MultL[C.B, yP, yP] == fp2AddL[fp2MultL[xP, xP, xP], fp2MultL[C.A, xP, xP], xP]
-                    where   xP = P.affine.x
-                            yP = P.affine.y
+            else LHS == RHS
+                where   
+                        yP      = P.affine.y
+                        yy      = fp2Square yP
+                        LHS     = fp2Mult C.B yy
+                        xx      = fp2Square xP
+                        xP      = P.affine.x
+                        xxx     = fp2Mult xP xx
+                        Axx     = fp2Mult C.A xx
+                        RHS     = fp2Add (fp2Add xxx Axx) xP
+                            
                             
 
 
@@ -729,7 +729,7 @@ get_yP_yQ_A_B pk = ([yP, yQ'], C)
 // Algorithm 42
 isogen_2 : [Nsk2][8] -> [6*Np][8]
 isogen_2 sk2 = pk2
-    where   exponent = fromInteger <~ ostoi sk2
+    where   exponent = ostoi sk2
             S = xADD startingCurve P2 (double_and_add`{Nsk2*8} startingCurve Q2 exponent )
             (C, [P3', Q3']) = iso_2_e S (startingCurve, [P3, Q3])
             xP3' = P3'.affine.x
@@ -740,7 +740,7 @@ isogen_2 sk2 = pk2
 // Algorithm 43
 isogen_3 : [Nsk3][8] -> [6*Np][8]
 isogen_3 sk3 = pk3
-    where   exponent = fromInteger <~ ostoi sk3
+    where   exponent = ostoi sk3
             S = xADD startingCurve P3 (double_and_add`{Nsk3*8} startingCurve Q3 exponent)
             (C, [P2', Q2']) = iso_3_e S (startingCurve, [P2, Q2])
             xP2' = P2'.affine.x
@@ -751,7 +751,7 @@ isogen_3 sk3 = pk3
 // Algorithm 44
 isoex_2 : [6*Np][8] -> [Nsk2][8] -> [2*Np][8]
 isoex_2 pk3 sk2 = j2
-    where   exponent = fromInteger <~ ostoi sk2
+    where   exponent = ostoi sk2
             [xP2', xQ2', xR2'] = ostopk pk3
             ([yP2', yQ2'], C) = get_yP_yQ_A_B pk3
             P2' = mkAffine xP2' yP2' 
@@ -764,7 +764,7 @@ isoex_2 pk3 sk2 = j2
 // Algorithm 45
 isoex_3 : [6*Np][8] -> [Nsk3][8] -> [2*Np][8]
 isoex_3 pk2 sk3 = j3
-    where   exponent = fromInteger <~ ostoi sk3
+    where   exponent = ostoi sk3
             [xP3', xQ3', xR3'] = ostopk pk2
             ([yP3', yQ3'], C) = get_yP_yQ_A_B pk2
             P3' = mkAffine xP3' yP3' 
@@ -849,22 +849,22 @@ KEM_Decaps sk ct    = ss
 
 property fpAddAssociative a b c = fpAdd a ( fpAdd b c ) == fpAdd ( fpAdd a b ) c
 property fpAddCommutative a b = fpAdd a b == fpAdd b a
-property fpAddZeroIdentity a = fpAdd a fpAddUnit == a
+property fpAddZeroIdentity a = fpAdd a fpAddUnit == fpMod a
 property fpAddValidInverse a = fpAdd a (fpAddInv a) == fpAddUnit
 property fpSubtOrderOfOps a b c = fpSubt (fpSubt a b) c == fpSubt a (fpAdd b c)
 property fpSubtAnticommutative a b = fpSubt a b == fpAddInv (fpSubt b a)
-property fpSubtZeroIdentity a = fpSubt a fpAddUnit == a
+property fpSubtZeroIdentity a = fpSubt a fpAddUnit == fpMod a
 property fpMultAssociative a b c = fpMult a ( fpMult b c ) == fpMult ( fpMult a b ) c
 property fpMultDistributive a b c = fpMult a (fpAdd b c) == fpAdd (fpMult a b) (fpMult a c)
 property fpMultCommutative a b = fpMult a b == fpMult b a
-property fpMultOneIdentity a = fpMult a fpMultUnit == a
+property fpMultOneIdentity a = fpMult a fpMultUnit == fpMod a
 property fpMultZeroNull a = fpMult a fpAddUnit == fpAddUnit
 property fpSquareIsMult a = fpSquare a == fpMult a a
 property fpAddInvSquareSelf = fpSquare fpAddUnit == fpAddUnit
-property fpMultValidInverse a = fpMult a (fpMultInv a) == fpMultUnit
-property fpMultInverseInverseIdentity a = fpMultInv (fpMultInv a) == a
-property fpSquareSqrtIdentity a = fpQuadNonRes a \/ (fpSqrt ~~> fpSquare) a == a
-property fpSqrtSquareIdentity a = abs a == a  \/ abs a == fpAddInv a
+property fpMultValidInverse a = fpMod a == fpAddUnit \/ fpMult a (fpMultInv a) == fpMultUnit
+property fpMultInverseInverseIdentity a = fpMod a == fpAddUnit \/ fpMultInv (fpMultInv a) == fpMod a
+property fpSquareSqrtIdentity a = fpQuadNonRes a \/ (fpSqrt ~~> fpSquare) a == fpMod a
+property fpSqrtSquareIdentity a = abs a == fpMod a  \/ abs a == fpAddInv a
     where abs = fpSquare ~~> fpSqrt
 
 //
@@ -873,23 +873,24 @@ property fpSqrtSquareIdentity a = abs a == a  \/ abs a == fpAddInv a
 
 property fp2AddAssociative a b c = fp2Add a ( fp2Add b c ) == fp2Add ( fp2Add a b ) c
 property fp2AddCommutative a b = fp2Add a b == fp2Add b a
-property fp2AddZeroIdentity a = fp2Add a fp2AddUnit == a
+property fp2AddZeroIdentity a = fp2Add a fp2AddUnit == fp2Mod a
 property fp2AddValidInverse a = fp2Add a (fp2AddInv a) == fp2AddUnit
 property fp2SubtOrderOfOps a b c = fp2Subt (fp2Subt a b) c == fp2Subt a (fp2Add b c)
 property fp2SubtAnticommutative a b = fp2Subt a b == fp2AddInv (fp2Subt b a)
-property fp2SubtZeroIdentity a = fp2Subt a fp2AddUnit == a
+property fp2SubtZeroIdentity a = fp2Subt a fp2AddUnit == fp2Mod a
 property fp2MultAssociative a b c = fp2Mult a ( fp2Mult b c ) == fp2Mult ( fp2Mult a b ) c
 property fp2MultDistributive a b c = fp2Mult a (fp2Add b c) == fp2Add (fp2Mult a b) (fp2Mult a c)
 property fp2MultCommutative a b = fp2Mult a b == fp2Mult b a
-property fp2MultOneIdentity a = fp2Mult a fp2MultUnit == a
+property fp2MultOneIdentity a = fp2Mult a fp2MultUnit == fp2Mod a
 property fp2MultZeroNull a = fp2Mult a fp2AddUnit == fp2AddUnit
 property fp2SquareIsMult a = fp2Square a == fp2Mult a a
 property fp2AddInvSquareSelf = fp2Square fp2AddUnit == fp2AddUnit
-property fp2MultValidInverse a = fp2Mult a (fp2MultInv a) == fp2MultUnit
-property fp2MultInverseInverseIdentity a = fp2MultInv (fp2MultInv a) == a
-property fp2SquareSqrtIdentity a = fp2QuadNonRes a \/ (fp2Sqrt ~~> fp2Square) a == a
-property fp2SqrtSquareIdentity a = abs a == a  \/ abs a == fp2AddInv a
+property fp2MultValidInverse a = fp2Mod a == fp2AddUnit \/ fp2Mult a (fp2MultInv a) == fp2MultUnit
+property fp2MultInverseInverseIdentity a = fp2Mod a == fp2AddUnit \/ fp2MultInv (fp2MultInv a) == fp2Mod a
+property fp2SquareSqrtIdentity a = fp2QuadNonRes a \/ (fp2Sqrt ~~> fp2Square) a == fp2Mod a
+property fp2SqrtSquareIdentity a = abs a == fp2Mod a  \/ abs a == fp2AddInv a
     where abs = fp2Square ~~> fp2Sqrt
+
 
 //
 // Isogen Random Test
@@ -900,7 +901,7 @@ isogenTestRandomness seed = (sk2', sk3')
     where state0                         = drbgInit seed
           (sk2Raw : [Nsk2][8], state1)   = randomBytes state0
           (sk3Raw : [Nsk3][8], _)        = randomBytes state1
-          sk2'                           = itoos <~ (ostoi sk2Raw) % `(2^^e2)
+          sk2'                           = itoos <~ (ostoi sk2Raw) // % `(2^^e2)
           sk3'                           = itoos <~ (ostoi sk3Raw) % `(2^^(lg2 (3^^e3) - 1))
 
 isogenTest : [384] -> Bit
@@ -922,7 +923,7 @@ pkeTestRandomness seed = (m', sk2', sk3')
           (m', state1)                   = randomBytes state0
           (sk2Raw : [Nsk2][8], state2)   = randomBytes state1
           (sk3Raw : [Nsk3][8], _)        = randomBytes state2
-          sk2'                           = itoos <~ (ostoi sk2Raw) % `(2^^e2)
+          sk2'                           = itoos <~ (ostoi sk2Raw) //% `(2^^e2)
           sk3'                           = itoos <~ (ostoi sk3Raw) % `(2^^(lg2 (3^^e3) - 1))
 
 pkeTest : [384] -> Bit
@@ -954,6 +955,7 @@ kemTest seed = ss == ssRec
         (ct, ss)     =   KEM_Encaps m pk
         ssRec        =   KEM_Decaps sk ct
 
+
 //
 // KAT Tests
 //
@@ -977,8 +979,6 @@ runKatTest req =   if  pk  != groupBy req.pk
         (pk, sk)    = KEM_KeyGen sk3 s
         (ct, ss)    = KEM_Encaps m pk
         ss1         = KEM_Decaps sk ct
-       
-
 
 ///
 /// Miscellaneous

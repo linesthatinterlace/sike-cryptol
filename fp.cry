@@ -1,0 +1,217 @@
+module fp where
+
+//
+// Functional programming operators.
+//
+
+(~~>) : {a, b, c} (a -> b) -> (b -> c) -> a -> c
+(~~>) f g = \x -> g (f x)
+infixr 100 ~~>
+
+(<~) : {a, b} (a -> b) -> a -> b
+(<~) f x = f x
+infixr 1 <~
+
+
+type p = 19  
+type Fp = [width p]       
+pBits = `p : [width p]
+        
+//
+// F_p
+//
+
+
+
+fpMod : {n} (fin n) => [n + width p] -> Fp
+fpMod a = drop (a % (zero # pBits))
+
+fpAdd : Fp -> Fp -> Fp
+fpAdd a b = fpMod <~ (0b0 # a) + (0b0 # b)
+
+fpAddUnit : Fp
+fpAddUnit = zero
+
+fpSubt : Fp -> Fp -> Fp
+fpSubt a b = fpAdd a (fpAddInv b)
+
+fpAddInv : Fp -> Fp
+fpAddInv a = fpMod <~ pBits - fpMod a
+
+fpDoub : Fp -> Fp
+fpDoub a = fpAdd a a
+
+fpScale : {n} (fin n) => Fp -> [n] -> Fp
+fpScale a n = bs ! 0
+    where   bs = [fpAddUnit] # [ if bit then fpAdd a (fpDoub b) else fpDoub b | b <- bs | bit <- n ]
+
+fpMult : Fp -> Fp -> Fp
+fpMult a b = fpMod <~ (fpAddUnit # a) * (fpAddUnit # b)
+
+fpMultUnit : Fp
+fpMultUnit = zero # 0b1
+
+fpPow : {n} (fin n) => Fp -> [n] -> Fp
+fpPow a n = bs ! 0
+    where   bs = [fpMultUnit] # [ if bit then fpMult a (fpSquare b) else fpSquare b | b <- bs | bit <- n ]
+
+fpMultInv : Fp -> Fp
+fpMultInv a =   if a == 0
+                then error "Cannot divide by zero!"
+                else fpPow a ( pBits - 2 )
+
+fpDiv : Fp -> Fp -> Fp
+fpDiv a b = fpMult a (fpMultInv b)
+
+fpSquare : Fp -> Fp
+fpSquare a = fpMult a a
+
+fpSqrt : Fp -> Fp
+fpSqrt a =  if fpSquare r != fpMod a then error "Not a quadratic residue in Fp!"
+            else    if isEven r
+                    then r
+                    else fpAddInv r
+            where   r   = fpPow a ( pBits + 1 >> 2 )
+                    isEven x = ~(x ! 0)
+
+fpQuadNonRes : Fp -> Bit
+fpQuadNonRes a = fpSquare r != fpMod a
+    where r   = fpPow a ( pBits + 1 >> 2 )
+    
+property fpAddAssociative a b c = fpAdd a ( fpAdd b c ) == fpAdd ( fpAdd a b ) c
+property fpAddCommutative a b = fpAdd a b == fpAdd b a
+property fpAddZeroIdentity a = fpAdd a fpAddUnit == fpMod a
+property fpAddValidInverse a = fpAdd a (fpAddInv a) == fpAddUnit
+property fpSubtOrderOfOps a b c = fpSubt (fpSubt a b) c == fpSubt a (fpAdd b c)
+property fpSubtAnticommutative a b = fpSubt a b == fpAddInv (fpSubt b a)
+property fpSubtZeroIdentity a = fpSubt a fpAddUnit == fpMod a
+property fpMultAssociative a b c = fpMult a ( fpMult b c ) == fpMult ( fpMult a b ) c
+property fpMultDistributive a b c = fpMult a (fpAdd b c) == fpAdd (fpMult a b) (fpMult a c)
+property fpMultCommutative a b = fpMult a b == fpMult b a
+property fpMultOneIdentity a = fpMult a fpMultUnit == fpMod a
+property fpMultZeroNull a = fpMult a fpAddUnit == fpAddUnit
+property fpSquareIsMult a = fpSquare a == fpMult a a
+property fpAddInvSquareSelf = fpSquare fpAddUnit == fpAddUnit
+property fpMultValidInverse a = fpMod a == fpAddUnit \/ fpMult a (fpMultInv a) == fpMultUnit
+property fpMultInverseInverseIdentity a = fpMod a == fpAddUnit \/ fpMultInv (fpMultInv a) == fpMod a
+property fpSquareSqrtIdentity a = fpQuadNonRes a \/ (fpSqrt ~~> fpSquare) a == fpMod a
+property fpSqrtSquareIdentity a = abs a == fpMod a  \/ abs a == fpAddInv a
+    where abs = fpSquare ~~> fpSqrt
+    
+    
+    
+    
+    
+    
+    
+    
+    
+//
+// F_(p^2)
+//
+
+type Fp2 = [2]Fp
+
+lift : Fp -> Fp2
+lift a = [a, fpAddUnit]
+
+norm : Fp2 -> Fp
+norm a = fpAdd (fpMult a0 a0) (fpMult a1 a1)
+    where   [a0, a1]    = a
+
+fp2Add : Fp2 -> Fp2 -> Fp2
+fp2Add a b = [fpAdd a0 b0, fpAdd a1 b1]
+    where   [a0, a1]    = a
+            [b0, b1]    = b
+
+fp2AddInv : Fp2 -> Fp2
+fp2AddInv a = [fpAddInv a0, fpAddInv a1]
+    where   [a0, a1]    = a
+
+fp2AddUnit : Fp2
+fp2AddUnit = lift fpAddUnit
+
+fp2Subt : Fp2 -> Fp2 -> Fp2
+fp2Subt a b = fp2Add a (fp2AddInv b)
+
+fp2Doub : Fp2 -> Fp2
+fp2Doub a = fp2Add a a
+
+fp2Scale : {n} (fin n) => Fp2 -> [n] -> Fp2
+fp2Scale a n = bs ! 0
+    where   bs = [fp2AddUnit] # [ if bit then fp2Add a (fp2Doub b) else fp2Doub b | b <- bs | bit <- n ]
+
+fp2Mult : Fp2 -> Fp2 -> Fp2
+fp2Mult a b = [fpSubt (fpMult a0 b0) (fpMult a1 b1), fpAdd (fpMult a0 b1) (fpMult a1 b0)]
+    where   [a0, a1]    = a
+            [b0, b1]    = b
+
+fp2MultInv : Fp2 -> Fp2
+fp2MultInv a = if a == zero then error "Cannot divide by zero!" else [a0', a1']
+    where   [a0', a1']  = [fpMult a0 (fpMultInv absVal), fpMult (fpAddInv a1) (fpMultInv absVal)]
+            [a0, a1]    = a
+            absVal      = fpAdd (fpMult a0 a0) (fpMult a1 a1)
+
+fp2MultUnit : Fp2
+fp2MultUnit = lift fpMultUnit
+
+fp2Div : Fp2 -> Fp2 -> Fp2
+fp2Div a b = fp2Mult a (fp2MultInv b)
+
+fp2Square : Fp2 -> Fp2
+fp2Square a = fp2Mult a a
+
+fp2Pow : {n} (fin n) => Fp2 -> [n] -> Fp2
+fp2Pow a n = bs ! 0
+    where   bs = [fp2MultUnit] # [ if bit then fp2Mult a (fp2Square b) else fp2Square b | b <- bs | bit <- n ]
+
+fp2Sqrt : Fp2 -> Fp2
+fp2Sqrt a = if fpQuadNonRes (norm a)
+            then error "Not a quadratic residue in Fp2!"
+            else
+                if  fpMod a1 == fpAddUnit
+                then    if      fpQuadNonRes a0
+                        then    [fpAddUnit, fpSqrt (fpAddInv a0)]
+                        else    [fpSqrt a0, fpAddUnit]
+                else    if      (isEven alpha)
+                        then    fp2AddInv [alpha, beta]
+                        else    [alpha, beta]
+                where   [a0, a1]    = a
+                        [alpha, beta]   =   if fpQuadNonRes z
+                                            then [beta', fpAddInv alpha']
+                                            else [alpha', beta']
+                        inv2            =   fpMultInv 2
+                        z               =   fpMult (fpAdd a0 (fpSqrt (norm a) ) ) inv2
+                        alpha'          =   fpPow z ( pBits + 1 >> 2 )
+                        beta'           =   fpMult (fpMult a1 (fpPow z ( pBits - 3 >> 2 )) ) inv2
+                        isEven x = ~(x ! 0)
+
+fp2QuadNonRes : Fp2 -> Bit
+fp2QuadNonRes = norm ~~> fpQuadNonRes
+
+fp2Mod : {n} (fin n) => [2][n + width p] -> Fp2
+fp2Mod [a0, a1] = [fpMod a0, fpMod a1]
+
+//
+// F_(p^2) Arithmetic Tests
+//
+
+property fp2AddAssociative a b c = fp2Add a ( fp2Add b c ) == fp2Add ( fp2Add a b ) c
+property fp2AddCommutative a b = fp2Add a b == fp2Add b a
+property fp2AddZeroIdentity a = fp2Add a fp2AddUnit == fp2Mod a
+property fp2AddValidInverse a = fp2Add a (fp2AddInv a) == fp2AddUnit
+property fp2SubtOrderOfOps a b c = fp2Subt (fp2Subt a b) c == fp2Subt a (fp2Add b c)
+property fp2SubtAnticommutative a b = fp2Subt a b == fp2AddInv (fp2Subt b a)
+property fp2SubtZeroIdentity a = fp2Subt a fp2AddUnit == fp2Mod a
+property fp2MultAssociative a b c = fp2Mult a ( fp2Mult b c ) == fp2Mult ( fp2Mult a b ) c
+property fp2MultDistributive a b c = fp2Mult a (fp2Add b c) == fp2Add (fp2Mult a b) (fp2Mult a c)
+property fp2MultCommutative a b = fp2Mult a b == fp2Mult b a
+property fp2MultOneIdentity a = fp2Mult a fp2MultUnit == fp2Mod a
+property fp2MultZeroNull a = fp2Mult a fp2AddUnit == fp2AddUnit
+property fp2SquareIsMult a = fp2Square a == fp2Mult a a
+property fp2AddInvSquareSelf = fp2Square fp2AddUnit == fp2AddUnit
+property fp2MultValidInverse a = fp2Mod a == fp2AddUnit \/ fp2Mult a (fp2MultInv a) == fp2MultUnit
+property fp2MultInverseInverseIdentity a = fp2Mod a == fp2AddUnit \/ fp2MultInv (fp2MultInv a) == fp2Mod a
+property fp2SquareSqrtIdentity a = fp2QuadNonRes a \/ (fp2Sqrt ~~> fp2Square) a == fp2Mod a
+property fp2SqrtSquareIdentity a = abs a == fp2Mod a  \/ abs a == fp2AddInv a
+    where abs = fp2Square ~~> fp2Sqrt
