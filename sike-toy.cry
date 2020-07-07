@@ -1,9 +1,7 @@
-module sike where
-import lib::keccak
-import lib::DRBG
+module siketoy where
 
 ////
-//// SIKE (Reference Implementation, Parameterized)
+//// SIKE Toy Implementation
 ////
 
 ///
@@ -14,112 +12,163 @@ import lib::DRBG
 // Parameters
 //
 
-xR20
-    type p  : # // p must be of the form 2^(e2)3^(e3) - 1
-    type constraint (fin p, p % 4 == 3, p>=7)
-    type e2 : #
-    type constraint (fin e2, e2 >=4) // Need >=4 for type reasons - in practice it will be bigger than this!
-    
-    type e3 : #
-    type constraint (fin e3, e3 >=1) // Need >=1 for type reasons - in practice it will be bigger than this!
-    
-    type Np   : # // Np   == lg2 p /^ 8
-    type constraint (fin Np, Np*8 >= width p, Np >= 1)
-    type Nsk2 : # // Nsk2 == e2 /^ 8
-    type constraint (fin Nsk2, 1<= Nsk2, Nsk2 <= 1024)    
-    type Nsk3 : # // Nsk3 == (lg2 (3^^e3) - 1) /^ 8
-    type constraint (fin Nsk3, 8 <= Nsk3, Nsk3 <= 1024, 8*Nsk3 >= width (2 ^^ (lg2 (3 ^^ e3) - 1)))
-    
-    type crypto_bytes : #
-    type constraint (fin crypto_bytes)
-
-    type msg_bytes : #
-    type constraint (fin msg_bytes, 1 <= msg_bytes, msg_bytes <= 1024)
-    
-    xQ20 : [Np*8]
-    xQ21 : [Np*8]
-    
-    yQ20 : [Np*8]
-    yQ21 : [Np*8]
-    
-    xP20 : [Np*8]
-    xP21 : [Np*8]
-    
-    yP20 : [Np*8]
-    yP21 : [Np*8]
-
-    xR20 : [Np*8]
-    xR21 : [Np*8]
-    
-    xQ30 : [Np*8]
-    xQ31 : [Np*8]
-    
-    yQ30 : [Np*8]
-    yQ31 : [Np*8]
-    
-    xP30 : [Np*8]
-    xP31 : [Np*8]
-    
-    yP30 : [Np*8]
-    yP31 : [Np*8]
-    
-    xR30 : [Np*8]
-    xR31 : [Np*8]
 
 //
-// Public generator points + curve
+// Starting Curve
 //
 
-xP2 = map (toInteger ~~> fromInteger) [xP20, xP21] : Fp2
-yP2 = map (toInteger ~~> fromInteger) [yP20, yP21] : Fp2
-P2  = mkAffine xP2 yP2
+startingCurve = { A = [fromInteger 6, fromInteger 0], B = [fromInteger 1, fromInteger 0]} : MontgomeryCurve
 
-xR2 = map (toInteger ~~> fromInteger) [xR20, xR21] : Fp2
+//
+// Parameter sets
+//
 
-xQ2 = map (toInteger ~~> fromInteger) [xQ20, xQ21] : Fp2
-yQ2 = map (toInteger ~~> fromInteger) [yQ20, yQ21] : Fp2
-Q2  = mkAffine xQ2 yQ2
+/*
+// p = 863
+type e2 = 5
+type e3 = 3
+genP2 = mkAffine [0x0027, 0x001a] [0x0122, 0x01db]
+genQ2 = mkAffine [0x02ff, 0x0045] [0x02a7, 0x029f]
+genP3 = mkAffine [0x00df, 0x0000] [0x0004, 0x0000]
+genQ3 = mkAffine [0x0270, 0x0000] [0x0000, 0x01b5]
+*/
+
+/*
+// p = 15551
+type e2 = 6
+type e3 = 5
+
+genP2 = mkAffine [0x31e7, 0x1e0e] [0x001f, 0x2089]
+genQ2 = mkAffine [0x064b, 0x361f] [0x0b98, 0x123c]
+genP3 = mkAffine [0x1fb1, 0x0000] [0x3c2a, 0x0000]
+genQ3 = mkAffine [0x0a2f, 0x0000] [0x0000, 0x3bf6]
+*/
+
+/*
+// p = 62207
+type e2 = 8
+type e3 = 5
+genP2 = mkAffine [0x07f4, 0x1641] [0xb3ee, 0x6b34]
+genQ2 = mkAffine [0x0dcc, 0x06df] [0xe18a, 0x8155]
+genP3 = mkAffine [0x64b7, 0x0000] [0x5c28, 0x0000]
+genQ3 = mkAffine [0x80a2, 0x0000] [0x0000, 0x583f]
+*/
+
+/*
+// p = 17915903
+type e2 = 13
+type e3 = 7
+genP2 = mkAffine [0x00dfedd1, 0x000cfe47] [0x003fd967, 0x0036aefd]
+genQ2 = mkAffine [0x00b130f4, 0x002a4380] [0x0056052e, 0x00a0814d]
+genP3 = mkAffine [0x0016dd2d, 0x00000000] [0x00c26491, 0x00000000]
+genQ3 = mkAffine [0x0095daa1, 0x00000000] [0x00000000, 0x0068cd59]
+*/
 
 
-xP3 = map (toInteger ~~> fromInteger) [xP30, xP31] : Fp2
-yP3 = map (toInteger ~~> fromInteger) [yP30, yP31] : Fp2
-P3  = mkAffine xP3 yP3
+// p = 214990847
+type e2 = 15
+type e3 = 8
+genP2 = mkAffine [0x0a7e21eb, 0x09ab3afb] [0x0366529e, 0x00615a32]
+genQ2 = mkAffine [0x09875b2b, 0x076a3372] [0x00216b6b, 0x0b6465ec]
+genP3 = mkAffine [0x09aa9e25, 0x00000000] [0x040d8353, 0x00000000]
+genQ3 = mkAffine [0x0b96ade2, 0x00000000] [0x00000000, 0x082a1f97]
 
-xR3 = map (toInteger ~~> fromInteger) [xR30, xR31] : Fp2
 
-xQ3 = map (toInteger ~~> fromInteger) [xQ30, xQ31] : Fp2
-yQ3 = map (toInteger ~~> fromInteger) [yQ30, yQ31] : Fp2
-Q3  = mkAffine xQ3 yQ3
 
-startingCurve = { A = [6, fpAddUnit], B = [1, fpAddUnit]} : MontgomeryCurve
+type p = 2^^e2*3^^e3 - 1
+type Np = (lg2 p / 8) + (lg2 p % 8) /^ 8
+type Nsk2 = e2 /^ 8
+type Nsk3 = (lg2 (3^^e3) - 1) /^ 8
+
+/*
+// This finds the generator points from first principles, given an e2 and e3.
+type e2 = 216
+type e3 = 137
+
+genP2 = mkP2Q2 <~ find P2Condition [1 ... ]
+genQ2 = mkP2Q2 <~ find Q2Condition [1 ... ]
+genP3 = mkP3Q3 <~ find P3Condition [1 ... ]
+genQ3 = mkP3Q3 <~ find Q3Condition [1 ... ]
+
+mkStartingPoint : Fp2 -> EllipticPoint
+mkStartingPoint xP = P
+    where
+        xPSquared  = fp2Square xP
+        xPCubed    = fp2Mult xP xPSquared
+        yPSquared  = fp2Add (fp2Add xPCubed (fp2Mult startingCurve.A xPSquared)) xP
+        yP         = fp2Sqrt yPSquared
+        P          = if fp2QuadNonRes yPSquared then zero else mkAffine xP yP
+
+mkP2Q2 : Integer -> EllipticPoint
+mkP2Q2 c = P2Q2
+    where
+        basePoint   = mkStartingPoint [fromInteger c, fromInteger 1]
+        P2Q2        = xTPLe`{width e3} `e3 startingCurve basePoint
+
+P2Condition : Integer -> Bool
+P2Condition c = twoTors.isAffine && ~twoTorsCheck.isAffine && (xTwoTors != [fromInteger 0, fromInteger 0])
+    where
+        P2              = mkP2Q2 c   
+        twoTors         = xDBLe`{width e2} `(e2 - 1) startingCurve P2
+        twoTorsCheck    = xDBL startingCurve twoTors
+        xTwoTors        = twoTors.affine.x
+
+Q2Condition : Integer -> Bool
+Q2Condition c = twoTors.isAffine && ~twoTorsCheck.isAffine && (xTwoTors == [fromInteger 0, fromInteger 0])
+    where
+        Q2              = mkP2Q2 c
+        twoTors         = xDBLe`{width e2} `(e2 - 1) startingCurve Q2
+        twoTorsCheck    = xDBL startingCurve twoTors
+        xTwoTors        = twoTors.affine.x
+
+mkP3Q3 : Integer -> EllipticPoint
+mkP3Q3 c = P3Q3
+    where
+        basePoint   = mkStartingPoint [fromInteger c, fromInteger 0]
+        P3Q3        = xDBLe`{width e2} `(e2 - 1) startingCurve basePoint
+
+P3Condition : Integer -> Bool
+P3Condition c = threeTors.isAffine && ~threeTorsCheck.isAffine && basePoint.isAffine && ( (basePoint.affine.y @ 1) == fromInteger 0 )
+    where
+        P3              = mkP3Q3 c
+        threeTors       = xTPLe`{width e3} `(e3 - 1) startingCurve P3
+        threeTorsCheck  = xTPL startingCurve threeTors
+        basePoint       = mkStartingPoint [fromInteger c, fromInteger 0]
+
+Q3Condition : Integer -> Bool
+Q3Condition c = threeTors.isAffine && ~threeTorsCheck.isAffine && basePoint.isAffine && ( (basePoint.affine.y @ 0) == fromInteger 0 )
+    where
+        Q3              = mkP3Q3 c
+        threeTors       = xTPLe`{width e3} `(e3 - 1) startingCurve Q3
+        threeTorsCheck  = xTPL startingCurve threeTors
+        basePoint       = mkStartingPoint [fromInteger c, fromInteger 0]
+*/
 
 // 
 // Data type conversions.
 // 
 
-ostoi : {mlen} (fin mlen) => [mlen][8] -> Integer
-ostoi = reverse ~~> join ~~> toInteger
+ostoi : {mlen} (fin mlen) => [mlen][8] -> [mlen*8]
+ostoi = reverse ~~> join
+
+itoos : {mlen} (fin mlen) => [mlen*8] -> [mlen][8]
+itoos = split ~~> reverse
 
 ostofp : [Np][8] -> Fp
-ostofp xs = if (a > `p - 1)
-            then error "Octet string does not represent a member of F_p."
-            else fromInteger a
-                where a = ostoi xs
+ostofp xs = if (a >= `p) then error "Octet string does not represent a member of F_p." else a
+    where a = ostoi xs
+
+fptoos : Fp -> [Np][8]
+fptoos = itoos
 
 ostofp2 : [2*Np][8] -> Fp2
 ostofp2 = split ~~> map ostofp
 
-ostopk : [6*Np][8] -> [3]Fp2
-ostopk = split ~~> map ostofp2
-
-itoos : {mlen} (fin mlen) => Integer -> [mlen][8]
-itoos = fromInteger ~~> split ~~> reverse
-
-fptoos : Fp -> [Np][8]
-fptoos = fpToInt ~~> itoos
-
 fp2toos : Fp2 -> [2*Np][8]
 fp2toos = map fptoos ~~> join
+
+ostopk : [6*Np][8] -> [3]Fp2
+ostopk = split ~~> map ostofp2
 
 pktoos : [3]Fp2 -> [6*Np][8]
 pktoos = map fp2toos ~~> join
@@ -133,9 +182,7 @@ pktoos = map fp2toos ~~> join
 // F_p
 //
 
-pBits = `p : [Np*8]
-
-
+pBits = `p : Fp
 
 type Fp = [Np*8]       
 
@@ -156,38 +203,6 @@ fpMult a b = fpMod <~ (fpAddUnit # a) * (fpAddUnit # b)
 
 fpMultUnit : Fp
 fpMultUnit = zero # 0b1
-
-fpToInt : Fp -> Integer
-fpToInt = toInteger
-
-
-
-/*
-type Fp = Z p       
-
-fpMod : Fp -> Fp
-fpMod a = a
-
-fpAdd : Fp -> Fp -> Fp
-fpAdd a b = a + b
-
-fpAddInv : Fp -> Fp
-fpAddInv a = -a
-
-fpAddUnit : Fp
-fpAddUnit = zero
-
-fpMult : Fp -> Fp -> Fp
-fpMult a b = a*b
-
-fpMultUnit : Fp
-fpMultUnit = 1
-
-fpToInt : Fp -> Integer
-fpToInt = fromZ
-*/
-
-
 
 fpCmp : Fp -> Fp -> Bit
 fpCmp a b = fpMod a == fpMod b
@@ -231,7 +246,7 @@ fpQuadNonRes a = ~(fpCmp (fpSquare r) a)
     where r   = fpPow a ( pBits + 1 >> 2 )
     
 isEven : Fp -> Bit
-isEven x = (fpToInt x % 2 == 0)
+isEven x = ~(x ! 0)
 
 //
 // F_(p^2)
@@ -329,8 +344,11 @@ mkAffine x' y' = { affine = {x = x', y = y'}, isAffine = True }
 type MontgomeryCurve = { A: Fp2, B: Fp2}
 
 mkMC : Fp2 -> Fp2 -> MontgomeryCurve
-mkMC a b = if fp2Cmp discrim fp2AddUnit then error "Discriminant must not be zero!" else {A = a, B = b}
-    where   discrim = fp2Mult b (fp2Subt (fp2Square a) (fp2Doub ~~> fp2Doub <~ fp2MultUnit) )
+mkMC a b = {A = a, B = b}
+
+verifyCurve : MontgomeryCurve -> Bit
+verifyCurve C = fp2Cmp discrim fp2AddUnit
+    where   discrim = fp2Mult C.B (fp2Subt (fp2Square C.A) (fp2Doub ~~> fp2Doub <~ fp2MultUnit) )
 
 verifyPoint : MontgomeryCurve -> EllipticPoint -> Bit
 verifyPoint C P =  if ~P.isAffine
@@ -670,7 +688,7 @@ iso_2_e : {n} (fin n) => EllipticPoint -> (MontgomeryCurve, [n]EllipticPoint) ->
 iso_2_e S' (C', Ps') = (C'', Ps'')
     where   init = {S = S', C = C', Ps = Ps'}
             init' = if (`e2 : Integer) % 2 == 1 then iso_2_e_odd_step (`e2 - 1) init else init
-            ms = reverse <~ map (\x -> x - 2) [2, 4 .. e2]
+            ms = reverse [0, 2 .. e2 - 2]
             ys = [init'] # [ iso_2_e_step m y | m <- ms | y <- ys ]
             final_y = ys ! 0
             (C'', Ps'') = (final_y.C, final_y.Ps)
@@ -695,7 +713,7 @@ iso_2_e_step k y = {S = S', C = C', Ps = Ps'}
 iso_3_e : {n} (fin n) => EllipticPoint -> (MontgomeryCurve, [n]EllipticPoint) -> (MontgomeryCurve, [n]EllipticPoint)
 iso_3_e S' (C', Ps') = (C'', Ps'')
     where   init = {S = S', C = C', Ps = Ps'}
-            ms = map (\x -> x - 1) [e3, e3 - 1 .. 1]
+            ms = reverse [0 .. e3 - 1]
             ys = [init] # [ iso_3_e_step m y | m <- ms | y <- ys ]
             final_y = ys ! 0
             (C'', Ps'') = (final_y.C, final_y.Ps)
@@ -762,9 +780,9 @@ get_yP_yQ_A_B pk = ([yP, yQ'], C)
 // Algorithm 42
 isogen_2 : [Nsk2][8] -> [6*Np][8]
 isogen_2 sk2 = pk2
-    where   exponent = (ostoi ~~> fromInteger) sk2
-            S = xADD startingCurve P2 (double_and_add`{Nsk2*8} startingCurve Q2 exponent )
-            (C, [P3', Q3']) = iso_2_e S (startingCurve, [P3, Q3])
+    where   exponent = ostoi sk2
+            S = xADD startingCurve genP2 (double_and_add`{Nsk2*8} startingCurve genQ2 exponent )
+            (C, [P3', Q3']) = iso_2_e S (startingCurve, [genP3, genQ3])
             xP3' = P3'.affine.x
             xQ3' = Q3'.affine.x
             xR3' = get_xR C P3' Q3'
@@ -773,9 +791,9 @@ isogen_2 sk2 = pk2
 // Algorithm 43
 isogen_3 : [Nsk3][8] -> [6*Np][8]
 isogen_3 sk3 = pk3
-    where   exponent = (ostoi ~~> fromInteger) sk3
-            S = xADD startingCurve P3 (double_and_add`{Nsk3*8} startingCurve Q3 exponent)
-            (C, [P2', Q2']) = iso_3_e S (startingCurve, [P2, Q2])
+    where   exponent = ostoi sk3
+            S = xADD startingCurve genP3 (double_and_add`{Nsk3*8} startingCurve genQ3 exponent)
+            (C, [P2', Q2']) = iso_3_e S (startingCurve, [genP2, genQ2])
             xP2' = P2'.affine.x
             xQ2' = Q2'.affine.x
             xR2' = get_xR C P2' Q2'
@@ -784,7 +802,7 @@ isogen_3 sk3 = pk3
 // Algorithm 44
 isoex_2 : [6*Np][8] -> [Nsk2][8] -> [2*Np][8]
 isoex_2 pk3 sk2 = j2
-    where   exponent = (ostoi ~~> fromInteger) sk2
+    where   exponent = ostoi sk2
             [xP2', xQ2', xR2'] = ostopk pk3
             ([yP2', yQ2'], C) = get_yP_yQ_A_B pk3
             P2' = mkAffine xP2' yP2' 
@@ -797,7 +815,7 @@ isoex_2 pk3 sk2 = j2
 // Algorithm 45
 isoex_3 : [6*Np][8] -> [Nsk3][8] -> [2*Np][8]
 isoex_3 pk2 sk3 = j3
-    where   exponent = (ostoi ~~> fromInteger) sk3
+    where   exponent = ostoi sk3
             [xP3', xQ3', xR3'] = ostopk pk2
             ([yP3', yQ3'], C) = get_yP_yQ_A_B pk2
             P3' = mkAffine xP3' yP3' 
@@ -806,71 +824,14 @@ isoex_3 pk2 sk3 = j3
             (C', _) = iso_3_e S (C, [])
             j3 = fp2toos <~ j_inv C'
 
-///
-/// Protocol Specification
-///
 
-//            
-// Hash functions. Defined using SHAKE-256.
-//
-
-F : [2*Np][8] -> [msg_bytes][8]
-F = fromBytes ~~> SHAKE256 ~~> take ~~> toBytes
-
-G : [msg_bytes + 6*Np][8] -> [Nsk2][8]
-G = fromBytes ~~> SHAKE256 ~~> take ~~> toBytes
-
-H : [msg_bytes + 6*Np + msg_bytes][8] -> [crypto_bytes][8]
-H = fromBytes ~~> SHAKE256 ~~> take ~~> toBytes
-
-
-//
-// Public-Key Encryption (Algorithm 1)
-//
-
-PKE_Gen : [Nsk3][8] -> ([6*Np][8], [Nsk3][8]) // The "input" here should be chosen uniformly at random from K_3.
-PKE_Gen sk3 = (pk3, sk3)
-    where pk3 = isogen_3 sk3
-
-PKE_Enc : [6*Np][8] -> [msg_bytes][8] -> [Nsk2][8] -> [6*Np + msg_bytes][8] // sk2 here should be chosen uniformly at random from K_2 if used for PKE.
-PKE_Enc pk3 m sk2 = ct
-    where   c0  = isogen_2 sk2
-            j   = isoex_2 pk3 sk2
-            h   = F j
-            c1  = h ^ m
-            ct  = c0 # c1
-
-PKE_Dec : [Nsk3][8] -> [6*Np + msg_bytes][8] -> [msg_bytes][8]
-PKE_Dec sk3 ct = m
-    where   (c0 : [6*Np][8]) # (c1 : [msg_bytes][8]) = ct
-            j   = isoex_3 c0 sk3
-            h   = F j
-            m   = h ^ c1  
-
-//
-// Key Encapsulation Mechanism (Algorithm 2)
-//
-
-KEM_KeyGen : [Nsk3][8] -> [msg_bytes][8] -> ([6*Np][8], [msg_bytes + Nsk3 + 6*Np][8]) // sk3 and s are random.
-KEM_KeyGen sk3 s    = (pk3, s # sk3 # pk3)
-    where   pk3     = isogen_3 sk3
-    
-KEM_Encaps : [msg_bytes][8] -> [6*Np][8] -> ([6*Np + msg_bytes][8], [crypto_bytes][8]) // m is random
-KEM_Encaps m pk3    = (ct, ss)
-    where   r       = G <~ m # pk3
-            ct      = PKE_Enc pk3 m r
-            ss      = H <~ m # ct
-
-KEM_Decaps : [msg_bytes + Nsk3 + 6*Np][8] -> [6*Np + msg_bytes][8] -> [crypto_bytes][8]
-KEM_Decaps sk ct    = ss
-    where   (s : [msg_bytes][8]) # (sk3 : [Nsk3][8]) # (pk3 : [6*Np][8]) = sk
-            m'  = PKE_Dec sk3 ct
-            r'  = G <~ m' # pk3
-            c0  = take`{6*Np} ct
-            c0' = isogen_2 r'
-            ss  = H <~ m # ct
-            m   = if c0' == c0 then m' else s
-
+isogenWork: ([Nsk2][8], [Nsk3][8]) -> Bool
+isogenWork (secretKeyAlice, secretKeyBob) = sharedSecretAlice == sharedSecretBob
+    where
+        publicKeyAlice      = isogen_2 secretKeyAlice
+        publicKeyBob        = isogen_3 secretKeyBob
+        sharedSecretAlice   = isoex_2 publicKeyBob secretKeyAlice
+        sharedSecretBob     = isoex_3 publicKeyAlice secretKeyBob
 
 ///
 /// Tests
@@ -922,93 +883,6 @@ property fp2MultInverseInverseIdentity a = fp2Cmp a fp2AddUnit \/ fp2Cmp ( fp2Mu
 property fp2SquareSqrtIdentity a = fp2QuadNonRes a \/ fp2Cmp ( (fp2Sqrt ~~> fp2Square) a ) a
 property fp2SqrtSquareIdentity a = fp2Cmp ( (fp2Square ~~> fp2Sqrt) a ) a \/ fp2Cmp ( (fp2Square ~~> fp2Sqrt) a ) ( fp2AddInv a )
 
-//
-// Isogen Random Test
-//
-
-isogenTestRandomness : [384] -> ([Nsk2][8], [Nsk3][8])
-isogenTestRandomness seed = (sk2', sk3')
-    where state0                         = drbgInit seed
-          (sk2Raw : [Nsk2][8], state1)   = randomBytes state0
-          (sk3Raw : [Nsk3][8], _)        = randomBytes state1
-          sk2'                           = itoos <~ (ostoi sk2Raw) // % `(2^^e2)
-          sk3'                           = itoos <~ (ostoi sk3Raw) % `(2^^(lg2 (3^^e3) - 1))
-
-isogenTest : [384] -> Bit
-isogenTest seed = sharedSecretAlice == sharedSecretBob
-    where
-    (secretKeyAlice, secretKeyBob) = isogenTestRandomness seed
-    publicKeyAlice      = isogen_2 secretKeyAlice
-    publicKeyBob        = isogen_3 secretKeyBob
-    sharedSecretAlice   = isoex_2 publicKeyBob secretKeyAlice
-    sharedSecretBob     = isoex_3 publicKeyAlice secretKeyBob
-
-//
-// PKE Random Test
-//
-
-pkeTestRandomness : [384] -> ([msg_bytes][8], [Nsk2][8], [Nsk3][8])
-pkeTestRandomness seed = (m', sk2', sk3')
-    where state0                         = drbgInit seed
-          (m', state1)                   = randomBytes state0
-          (sk2Raw : [Nsk2][8], state2)   = randomBytes state1
-          (sk3Raw : [Nsk3][8], _)        = randomBytes state2
-          sk2'                           = itoos <~ (ostoi sk2Raw) //% `(2^^e2)
-          sk3'                           = itoos <~ (ostoi sk3Raw) % `(2^^(lg2 (3^^e3) - 1))
-
-pkeTest : [384] -> Bit
-pkeTest seed = m == mRec
-    where
-        (m, sk2, sk3)   =   pkeTestRandomness seed
-        (pk3, _)        =   PKE_Gen sk3
-        ct              =   PKE_Enc pk3 m sk2
-        mRec            =   PKE_Dec sk3 ct
-       
-
-//
-// KEM Random Test
-// 
-
-kemTestRandomness : [384] -> ([msg_bytes][8], [Nsk3][8], [msg_bytes][8])
-kemTestRandomness seed = (s', sk3', m')
-    where state0                         = drbgInit seed
-          (s', state1)                   = randomBytes state0
-          (sk3Raw : [Nsk3][8], state2)   = randomBytes state1
-          (m', _)                        = randomBytes state2
-          sk3'                           = itoos <~ (ostoi sk3Raw) % `(2^^(lg2 (3^^e3) - 1))
-
-kemTest : [384] -> Bit
-kemTest seed = ss == ssRec
-    where
-        (s, sk3, m)  =   kemTestRandomness seed
-        (pk, sk)     =   KEM_KeyGen sk3 s
-        (ct, ss)     =   KEM_Encaps m pk
-        ssRec        =   KEM_Decaps sk ct
-
-
-//
-// KAT Tests
-//
-
-type KatTest = { count : Integer, seed : [384], pk: [6*Np*8], sk : [(msg_bytes + Nsk3 + 6*Np)*8], ct : [(6*Np + msg_bytes)*8], ss : [crypto_bytes*8]}  
-
-runKatTest : KatTest -> Bit
-runKatTest req =   if  pk  != groupBy req.pk
-                then trace "Generated public key different from stored public key." req.count False
-                |   sk  != groupBy req.sk
-                then trace "Generated secret key different from stored secret key." req.count False
-                |   ct  != groupBy req.ct
-                then trace "Generated encapsulated secret different from stored encapsulated secret." req.count False
-                |   ss  != groupBy req.ss
-                then trace "Generated shared secret different from stored shared secret." req.count False
-                |   ss1 != ss
-                then trace "Bad shared secret value returned." req.count False
-                else True
-    where
-        (s, sk3, m) = kemTestRandomness req.seed
-        (pk, sk)    = KEM_KeyGen sk3 s
-        (ct, ss)    = KEM_Encaps m pk
-        ss1         = KEM_Decaps sk ct
 
 ///
 /// Miscellaneous
@@ -1025,3 +899,10 @@ infixr 100 ~~>
 (<~) : {a, b} (a -> b) -> a -> b
 (<~) f x = f x
 infixr 1 <~
+
+//
+// Find functions.
+//
+
+find : {a} (a -> Bool) -> [inf]a -> a
+find p xs = if (p (head xs)) then head xs else find p (tail xs)

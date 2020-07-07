@@ -8,7 +8,6 @@ module sike_p434 = sike where
     type Nsk3           = 28
     type crypto_bytes   = 16
     type msg_bytes      = 16
-    startingCurve       = { A = [(6 : [Np*8]), zero], B = [(1 : [Np*8]), zero]}
     xQ20                = drop 0x0000C7461738340EFCF09CE388F666EB38F7F3AFD42DC0B664D9F461F31AA2EDC6B4AB71BD42F4D7C058E13F64B237EF7DDD2ABC0DEB0C6C : [Np*8]
     xQ21                = drop 0x000025DE37157F50D75D320DD0682AB4A67E471586FBC2D31AA32E6957FA2B2614C4CD40A1E27283EAAF4272AE517847197432E2D61C85F5 : [Np*8]
     
