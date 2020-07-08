@@ -25,10 +25,10 @@ startingCurve = { A = [0x00000006, 0x00000000], B = [0x00000001, 0x00000000]} : 
 
 // p = 214990847
 p = 0x0cd07fff
-genP2 = mkAffine [0x0a7e21eb, 0x09ab3afb] [0x0366529e, 0x00615a32]
-genQ2 = mkAffine [0x09875b2b, 0x076a3372] [0x00216b6b, 0x0b6465ec]
-genP3 = mkAffine [0x09aa9e25, 0x00000000] [0x040d8353, 0x00000000]
-genQ3 = mkAffine [0x0b96ade2, 0x00000000] [0x00000000, 0x082a1f97]
+param_P2 = mkAffine [0x0a7e21eb, 0x09ab3afb] [0x0366529e, 0x00615a32]
+param_Q2 = mkAffine [0x09875b2b, 0x076a3372] [0x00216b6b, 0x0b6465ec]
+param_P3 = mkAffine [0x09aa9e25, 0x00000000] [0x040d8353, 0x00000000]
+param_Q3 = mkAffine [0x0b96ade2, 0x00000000] [0x00000000, 0x082a1f97]
 
 
 // 
@@ -203,10 +203,10 @@ fp2QuadNonRes = norm ~~> fpQuadNonRes
 // Elliptic Points and (Montgomery) curve data types.
 //
 
-type EllipticPoint = {affine: {x: [2][32], y: [2][32]}, isAffine: Bit}
+type EllipticPoint = {x: [2][32], y: [2][32]}
 
 mkAffine : [2][32] -> [2][32] -> EllipticPoint
-mkAffine x' y' = { affine = {x = x', y = y'}, isAffine = True }
+mkAffine x' y' = {x = x', y = y'}
 
 type MontgomeryCurve = { A: [2][32], B: [2][32]}
 
@@ -217,25 +217,24 @@ verifyCurve : MontgomeryCurve -> Bit
 verifyCurve C = fp2Cmp discrim fp2AddUnit
     where   discrim = fp2Mult C.B (fp2Subt (fp2Square C.A) (fp2Doub ~~> fp2Doub <~ fp2MultUnit) )
 
+pointAtInfinity : EllipticPoint
+pointAtInfinity = mkAffine [0x00000000, 0x00000000] [0x00000001, 0x00000000]
+
+isInfinite : EllipticPoint -> Bit
+isInfinite P = (fp2Cmp P.x pointAtInfinity.x) /\ (fp2Cmp P.y pointAtInfinity.y)
+
 verifyPoint : MontgomeryCurve -> EllipticPoint -> Bit
-verifyPoint C P =  if ~P.isAffine
-            then True
-            else fp2Cmp LHS RHS
+verifyPoint C P =  (isInfinite P) || (fp2Cmp LHS RHS)
                 where   
-                        yP      = P.affine.y
+                        yP      = P.y
                         yy      = fp2Square yP
                         LHS     = fp2Mult C.B yy
                         xx      = fp2Square xP
-                        xP      = P.affine.x
+                        xP      = P.x
                         xxx     = fp2Mult xP xx
                         Axx     = fp2Mult C.A xx
                         RHS     = fp2Add (fp2Add xxx Axx) xP
                             
-                            
-pointCompare : EllipticPoint -> EllipticPoint -> Bit
-pointCompare P Q = if ~P.isAffine
-                   then ~Q.isAffine
-                   else (Q.isAffine) /\ (fp2Cmp P.affine.x Q.affine.x) /\ (fp2Cmp P.affine.y Q.affine.y)
 
 //
 // Point and curve operations.
@@ -243,13 +242,13 @@ pointCompare P Q = if ~P.isAffine
 
 // Algorithm 25
 xDBL : MontgomeryCurve -> EllipticPoint -> EllipticPoint
-xDBL C P =  if ~P.isAffine
-            then zero
-            |  pointCompare P (xNEGATE C P)
-            then zero
+xDBL C P =  if isInfinite P
+            then pointAtInfinity
+            |  fp2Cmp P.y fp2AddUnit
+            then pointAtInfinity
             else mkAffine x2P y2P
-                where   xP  = P.affine.x
-                        yP  = P.affine.y
+                where   xP  = P.x
+                        yP  = P.y
                         t3  = fp2Square xP
                         t4  = fp2Doub t3
                         t5  = fp2MultUnit
@@ -284,28 +283,21 @@ xDBLe e C P = ys @ e
                 where ys = iterate (xDBL C) P
 
 
-xNEGATE : MontgomeryCurve -> EllipticPoint -> EllipticPoint
-xNEGATE C P =   if ~P.isAffine
-                then P
-                else {affine = {x = xP, y = fp2AddInv yP}, isAffine = True}
-                    where   xP = P.affine.x
-                            yP = P.affine.y
-
 // Algorithm 27
 xADD : MontgomeryCurve -> EllipticPoint -> EllipticPoint -> EllipticPoint
-xADD C P Q =    if ~P.isAffine
+xADD C P Q =    if isInfinite P
                 then Q
-                |  ~Q.isAffine
+                |  isInfinite Q
                 then P
-                | pointCompare P Q
+                | (fp2Cmp P.x Q.x) /\ (fp2Cmp P.y Q.y)
                 then xDBL C P
-                | pointCompare P (xNEGATE C Q)
-                then zero
+                | (fp2Cmp P.x Q.x) /\ (fp2Cmp P.y (fp2AddInv Q.y))
+                then pointAtInfinity
                 else mkAffine xPQ yPQ
-                    where   xP  = P.affine.x
-                            yP  = P.affine.y
-                            xQ  = Q.affine.x
-                            yQ  = Q.affine.y
+                    where   xP  = P.x
+                            yP  = P.y
+                            xQ  = Q.x
+                            yQ  = Q.y
                             t9  = fp2Subt yQ yP
                             t10 = fp2Subt xQ xP
                             t11 = fp2MultInv t10
@@ -340,7 +332,7 @@ xTPLe e C P  = ys @ e
 // Algorithm 30
 double_and_add : {n} (fin n) => MontgomeryCurve -> EllipticPoint -> [n] -> EllipticPoint
 double_and_add C P n = bs ! 0
-                        where bs = [zero] # [ if bit then xADD C P (xDBL C b) else xDBL C b | b <- bs | bit <- n ]
+                        where bs = [pointAtInfinity] # [ if bit then xADD C P (xDBL C b) else xDBL C b | b <- bs | bit <- n ]
 
 // Algorithm 31
 j_inv : MontgomeryCurve ->  [2][32]
@@ -386,7 +378,7 @@ curve_2_iso x2 C = {A = a', B = b'}
 // Algorithm 33
 eval_2_iso : [2][32] -> EllipticPoint -> EllipticPoint
 eval_2_iso x2 Q = Q'
-    where   (xQ, yQ) = (Q.affine.x, Q.affine.y)
+    where   (xQ, yQ) = (Q.x, Q.y)
             t1  = fp2Mult xQ x2
             t2  = fp2Mult xQ t1
             t3  = fp2Mult t1 x2
@@ -431,7 +423,7 @@ curve_4_iso x4 C = {A = a', B = b'}
 // Algorithm 35
 eval_4_iso : [2][32] -> EllipticPoint -> EllipticPoint
 eval_4_iso x4 Q = Q'
-    where   (xQ, yQ) = (Q.affine.x, Q.affine.y)
+    where   (xQ, yQ) = (Q.x, Q.y)
             t1  = fp2Square xQ
             t2  = fp2Square t1
             t3  = fp2Square x4
@@ -521,7 +513,7 @@ curve_3_iso x3 C = {A = a', B = b'}
 // Algorithm 37
 eval_3_iso : [2][32] -> EllipticPoint -> EllipticPoint
 eval_3_iso x3 Q = Q'
-    where   (xQ, yQ) = (Q.affine.x, Q.affine.y)
+    where   (xQ, yQ) = (Q.x, Q.y)
             t1  = fp2Square xQ
             t2  = fp2Mult t1 x3
             t3  = fp2Square x3
@@ -563,7 +555,7 @@ iso_2_e S' (C', Ps') = (C'', Ps'')
 iso_2_e_odd_step : {n} (fin n) => [4] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
 iso_2_e_odd_step k y = {S = S', C = C', Ps = Ps'}
     where   T   = xDBLe k y.C y.S
-            xT  = if ~T.isAffine then undefined else T.affine.x
+            xT  = if isInfinite T then undefined else T.x
             S'  = eval_2_iso xT y.S
             C'  = curve_2_iso xT y.C
             Ps' = map (eval_2_iso xT) y.Ps
@@ -571,7 +563,7 @@ iso_2_e_odd_step k y = {S = S', C = C', Ps = Ps'}
 iso_2_e_step : {n} (fin n) => [4] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
 iso_2_e_step k y = {S = S', C = C', Ps = Ps'}
     where   T   = xDBLe k y.C y.S
-            xT  = if ~T.isAffine then undefined else T.affine.x
+            xT  = if isInfinite T then undefined else T.x
             S'  = eval_4_iso xT y.S
             C'  = curve_4_iso xT y.C
             Ps' = map (eval_4_iso xT) y.Ps
@@ -588,7 +580,7 @@ iso_3_e S' (C', Ps') = (C'', Ps'')
 iso_3_e_step : {n} (fin n) => [3] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
 iso_3_e_step k y = {S = S', C = C', Ps = Ps'}
     where   T = xTPLe k y.C y.S
-            xT = if ~T.isAffine then undefined else T.affine.x
+            xT = if isInfinite T then undefined else T.x
             S' = eval_3_iso xT y.S
             C' = curve_3_iso xT y.C
             Ps' = map (eval_3_iso xT) y.Ps
@@ -613,11 +605,11 @@ get_A [xP, xQ, xR] = A
 
 // Algorithm 40
 get_xR : MontgomeryCurve -> EllipticPoint -> EllipticPoint -> [2][32]
-get_xR C P Q = (xADD C P <~ xNEGATE C Q).affine.x
+get_xR C P Q = (xADD C P (mkAffine Q.x (fp2AddInv Q.y))).x
 
 // Algorithm 41
-get_yP_yQ_A_B : [24][8] -> ([2][2][32], MontgomeryCurve)
-get_yP_yQ_A_B pk = ([yP, yQ'], C)
+get_yP_yQ_A_B : [24][8] -> (EllipticPoint, EllipticPoint, MontgomeryCurve)
+get_yP_yQ_A_B pk = (P, Q, C)
     where   [xP, xQ, xR] = ostopk pk
             t1  = get_A [xP, xQ, xR]
             t2  = fp2MultUnit
@@ -648,10 +640,10 @@ get_yP_yQ_A_B pk = ([yP, yQ'], C)
 isogen_2 : [2][8] -> [24][8]
 isogen_2 sk2 = pk2
     where   exponent = (reverse ~~> join) sk2
-            S = xADD startingCurve genP2 (double_and_add startingCurve genQ2 exponent )
-            (C, [P3', Q3']) = iso_2_e S (startingCurve, [genP3, genQ3])
-            xP3' = P3'.affine.x
-            xQ3' = Q3'.affine.x
+            S = xADD startingCurve param_P2 (double_and_add startingCurve param_Q2 exponent )
+            (C, [P3', Q3']) = iso_2_e S (startingCurve, [param_P3, param_Q3])
+            xP3' = P3'.x
+            xQ3' = Q3'.x
             xR3' = get_xR C P3' Q3'
             pk2 = pktoos [xP3', xQ3', xR3']
 
@@ -659,10 +651,10 @@ isogen_2 sk2 = pk2
 isogen_3 : [2][8] -> [24][8]
 isogen_3 sk3 = pk3
     where   exponent = (reverse ~~> join) sk3
-            S = xADD startingCurve genP3 (double_and_add startingCurve genQ3 exponent)
-            (C, [P2', Q2']) = iso_3_e S (startingCurve, [genP2, genQ2])
-            xP2' = P2'.affine.x
-            xQ2' = Q2'.affine.x
+            S = xADD startingCurve param_P3 (double_and_add startingCurve param_Q3 exponent)
+            (C, [P2', Q2']) = iso_3_e S (startingCurve, [param_P2, param_Q2])
+            xP2' = P2'.x
+            xQ2' = Q2'.x
             xR2' = get_xR C P2' Q2'
             pk3 = pktoos [xP2', xQ2', xR2']
 
@@ -671,9 +663,7 @@ isoex_2 : [24][8] -> [2][8] -> [8][8]
 isoex_2 pk3 sk2 = j2
     where   exponent = (reverse ~~> join) sk2
             [xP2', xQ2', xR2'] = ostopk pk3
-            ([yP2', yQ2'], C) = get_yP_yQ_A_B pk3
-            P2' = mkAffine xP2' yP2' 
-            Q2' = mkAffine xQ2' yQ2'
+            (P2', Q2', C) = get_yP_yQ_A_B pk3
             S = xADD C P2' (double_and_add C Q2' exponent)
             (C', _) = iso_2_e S (C, [])
             j2 = fp2toos <~ j_inv C'
@@ -684,9 +674,7 @@ isoex_3 : [24][8] -> [2][8] -> [8][8]
 isoex_3 pk2 sk3 = j3
     where   exponent = (reverse ~~> join) sk3
             [xP3', xQ3', xR3'] = ostopk pk2
-            ([yP3', yQ3'], C) = get_yP_yQ_A_B pk2
-            P3' = mkAffine xP3' yP3' 
-            Q3' = mkAffine xQ3' yQ3'
+            (P3', Q3', C) = get_yP_yQ_A_B pk2
             S = xADD C P3' (double_and_add C Q3' exponent)
             (C', _) = iso_3_e S (C, [])
             j3 = fp2toos <~ j_inv C'
