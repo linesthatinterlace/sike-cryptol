@@ -17,41 +17,43 @@ module sidh32 where
 // Starting Curve
 //
 
-startingCurve = { A = [0x00000006, 0x00000000], B = [0x00000001, 0x00000000]} : MontgomeryCurve
+startingCurve = mkMC (mkFP2 0x00000006 0x00000000) (mkFP2 0x00000001 0x00000000)
 
 //
 // Parameter sets
 //
 
 // p = 214990847
-p = 0x0cd07fff
-param_P2 = mkAffine [0x0a7e21eb, 0x09ab3afb] [0x0366529e, 0x00615a32]
-param_Q2 = mkAffine [0x09875b2b, 0x076a3372] [0x00216b6b, 0x0b6465ec]
-param_P3 = mkAffine [0x09aa9e25, 0x00000000] [0x040d8353, 0x00000000]
-param_Q3 = mkAffine [0x0b96ade2, 0x00000000] [0x00000000, 0x082a1f97]
+modulus = 0x0cd07fff
+param_P2 = mkAffine (mkFP2 0x0a7e21eb 0x09ab3afb) (mkFP2 0x0366529e 0x00615a32)
+param_Q2 = mkAffine (mkFP2 0x09875b2b 0x076a3372) (mkFP2 0x00216b6b 0x0b6465ec)
+param_P3 = mkAffine (mkFP2 0x09aa9e25 0x00000000) (mkFP2 0x040d8353 0x00000000)
+param_Q3 = mkAffine (mkFP2 0x0b96ade2 0x00000000) (mkFP2 0x00000000 0x082a1f97)
 
 
 // 
 // Data type conversions.
 // 
 
-ostofp : [4][8] -> [32]
-ostofp xs = if (a >= p) then error "Octet string does not represent a member of F_p." else a
-    where a = (reverse ~~> join) xs
+ostofp : [4][8] -> Fp
+ostofp os = if (a >= modulus) then error "Octet string does not represent a member of F_p." else a
+    where a = (reverse ~~> join) os
 
-fptoos : [32] -> [4][8]
-fptoos = (\x -> x % p) ~~> split ~~> reverse
+fptoos : Fp -> [4][8]
+fptoos = (\x -> x % modulus) ~~> split ~~> reverse
 
-ostofp2 : [8][8] -> [2][32]
-ostofp2 = split ~~> map ostofp
+ostofp2 : [8][8] -> Fp2
+ostofp2 os = mkFP2 x0 x1
+    where [x0, x1] = map ostofp <~ split`{2} os
 
-fp2toos : [2][32] -> [8][8]
-fp2toos = map fptoos ~~> join
+fp2toos : Fp2 -> [8][8]
+fp2toos a = os
+    where os = (map fptoos ~~> join) [a.x0, a.x1]
 
-ostopk : [24][8] -> [3][2][32]
+ostopk : [24][8] -> [3]Fp2
 ostopk = split ~~> map ostofp2
 
-pktoos : [3][2][32] -> [24][8]
+pktoos : [3]Fp2 -> [24][8]
 pktoos = map fp2toos ~~> join
 
 cast32To64 : [32] -> [64]
@@ -67,131 +69,135 @@ cast64To32 = drop
 //
 // F_p
 //
-  
 
-fpAdd : [32] -> [32] -> [32]
-fpAdd a b = cast64To32 <~ (a' + b') % p'
+type Fp = [32]  
+
+fpAdd : Fp -> Fp -> Fp
+fpAdd a b = cast64To32 <~ (a' + b') % modulus'
     where   a' = cast32To64 a
             b' = cast32To64 b
-            p' = cast32To64 p
+            modulus' = cast32To64 modulus
 
-fpAddInv : [32] -> [32]
-fpAddInv a = if r == fpAddUnit then fpAddUnit else p - r
-    where   r  = (a % p)
+fpAddInv : Fp -> Fp
+fpAddInv a = if r == fpAddUnit then fpAddUnit else modulus - r
+    where   r  = (a % modulus)
 
-fpAddUnit : [32]
+fpAddUnit : Fp
 fpAddUnit = zero
 
-fpMult : [32] -> [32] -> [32]
-fpMult a b = cast64To32 <~ (a' * b') % p'
+fpMult : Fp -> Fp -> Fp
+fpMult a b = cast64To32 <~ (a' * b') % modulus'
     where   a' = cast32To64 a
             b' = cast32To64 b
-            p' = cast32To64 p
+            modulus' = cast32To64 modulus
 
-fpMultUnit : [32]
+fpMultUnit : Fp
 fpMultUnit = zero # 0b1
 
-fpCmp : [32] -> [32] -> Bit
-fpCmp a b = (a % p) == (b % p)
+fpCmp : Fp -> Fp -> Bit
+fpCmp a b = (a % modulus) == (b % modulus)
 
-fpSubt : [32] -> [32] -> [32]
+fpSubt : Fp -> Fp -> Fp
 fpSubt a b = fpAdd a (fpAddInv b)
 
-fpPow : [32] -> [32] -> [32]
+fpPow : Fp -> Fp -> Fp
 fpPow a n = bs ! 0
     where   bs = [fpMultUnit] # [ if bit then fpMult a (fpSquare b) else fpSquare b | b <- bs | bit <- n ]
 
-fpMultInv : [32] -> [32]
+fpMultInv : Fp -> Fp
 fpMultInv a =   if fpCmp a fpAddUnit
                 then error "Cannot divide by zero!"
-                else fpPow a ( p - 2 )
+                else fpPow a ( modulus - 2 )
                 
 
-fpSquare : [32] -> [32]
+fpSquare : Fp -> Fp
 fpSquare a = fpMult a a
 
-fpSqrt : [32] -> [32]
-fpSqrt a =  if ~(fpCmp (fpSquare r) a) then error "Not a quadratic residue in [32]!"
+fpSqrt : Fp -> Fp
+fpSqrt a =  if ~(fpCmp (fpSquare r) a) then error "Not a quadratic residue in Fp!"
             else    if isEven r
                     then r
                     else fpAddInv r
-            where   r   = fpPow a ( p + 1 >> 2 )
+            where   r   = fpPow a ( modulus + 1 >> 2 )
 
-fpQuadNonRes : [32] -> Bit
+fpQuadNonRes : Fp -> Bit
 fpQuadNonRes a = ~(fpCmp (fpSquare r) a)
-    where r   = fpPow a ( p + 1 >> 2 )
+    where r   = fpPow a ( modulus + 1 >> 2 )
     
-isEven : [32] -> Bit
+isEven : Fp -> Bit
 isEven x = ~(x ! 0)
 
 //
 // F_(p^2)
 //
 
-lift : [32] -> [2][32]
-lift a = [a, fpAddUnit]
+type Fp2 = {x0 : Fp, x1 : Fp}
 
-norm : [2][32] -> [32]
-norm a = fpAdd (fpMult a0 a0) (fpMult a1 a1)
-    where   [a0, a1]    = a
+mkFP2 : Fp -> Fp -> Fp2
+mkFP2 x0' x1' = {x0 = x0', x1 = x1'}
 
-fp2Cmp : [2][32] -> [2][32] -> Bit
-fp2Cmp [a0, a1] [b0, b1] = fpCmp a0 b0 /\ fpCmp a1 b1
+lift : Fp -> Fp2
+lift a = mkFP2 a fpAddUnit
 
-fp2Add : [2][32] -> [2][32] -> [2][32]
-fp2Add [a0, a1] [b0, b1] = [fpAdd a0 b0, fpAdd a1 b1]
+norm : Fp2 -> Fp
+norm a = fpAdd (fpMult a.x0 a.x0) (fpMult a.x1 a.x1)
 
-fp2AddInv : [2][32] -> [2][32]
-fp2AddInv  = map fpAddInv
+fp2Cmp : Fp2 -> Fp2 -> Bit
+fp2Cmp a b = fpCmp a.x0 b.x0 /\ fpCmp a.x1 b.x1
 
-fp2AddUnit : [2][32]
+fp2Add : Fp2 -> Fp2 -> Fp2
+fp2Add a b = mkFP2 (fpAdd a.x0 b.x0) (fpAdd a.x1 b.x1)
+
+fp2AddInv : Fp2 -> Fp2
+fp2AddInv a = mkFP2 (fpAddInv a.x0) (fpAddInv a.x1)
+
+fp2AddUnit : Fp2
 fp2AddUnit = lift fpAddUnit
 
-fp2Subt : [2][32] -> [2][32] -> [2][32]
+fp2Subt : Fp2 -> Fp2 -> Fp2
 fp2Subt a b = fp2Add a (fp2AddInv b)
 
-fp2Doub : [2][32] -> [2][32]
+fp2Doub : Fp2 -> Fp2
 fp2Doub a = fp2Add a a
 
-fp2Mult : [2][32] -> [2][32] -> [2][32]
-fp2Mult [a0, a1] [b0, b1] = [fpSubt (fpMult a0 b0) (fpMult a1 b1), fpAdd (fpMult a0 b1) (fpMult a1 b0)]
+fp2Mult : Fp2 -> Fp2 -> Fp2
+fp2Mult a b = mkFP2 (fpSubt (fpMult a.x0 b.x0) (fpMult a.x1 b.x1)) (fpAdd (fpMult a.x0 b.x1) (fpMult a.x1 b.x0))
 
-fp2MultInv : [2][32] -> [2][32]
-fp2MultInv [a0, a1] =   if fp2Cmp [a0, a1] fp2AddUnit
+fp2MultInv : Fp2 -> Fp2
+fp2MultInv a =   if fp2Cmp a fp2AddUnit
                         then error "Cannot divide by zero!"
-                        else [fpMult a0 (fpMultInv (norm [a0, a1])), fpMult (fpAddInv a1) (fpMultInv (norm [a0, a1]))]
+                        else fp2Mult ((norm ~~> fpMultInv ~~> lift) a) (mkFP2 a.x0 (fpAddInv a.x1))
 
-fp2MultUnit : [2][32]
+fp2MultUnit : Fp2
 fp2MultUnit = lift fpMultUnit
 
-fp2Div : [2][32] -> [2][32] -> [2][32]
+fp2Div : Fp2 -> Fp2 -> Fp2
 fp2Div a b = fp2Mult a (fp2MultInv b)
 
-fp2Square : [2][32] -> [2][32]
+fp2Square : Fp2 -> Fp2
 fp2Square a = fp2Mult a a
 
 
-fp2Sqrt : [2][32] -> [2][32]
+fp2Sqrt : Fp2 -> Fp2
 fp2Sqrt a = if fpQuadNonRes (norm a)
-            then error "Not a quadratic residue in [2][32]!"
+            then error "Not a quadratic residue in Fp2!"
             else
-                if      fpCmp a1 fpAddUnit
-                then    if      fpQuadNonRes a0
-                        then    [fpAddUnit, fpSqrt (fpAddInv a0)]
-                        else    [fpSqrt a0, fpAddUnit]
-                else    if      (~isEven alpha)
-                        then    fp2AddInv [alpha, beta]
-                        else    [alpha, beta]
-                where   [a0, a1]    = a
-                        [alpha, beta]   =   if fpQuadNonRes z
-                                            then [beta', fpAddInv alpha']
-                                            else [alpha', beta']
+                if      fpCmp a.x1 fpAddUnit
+                then    if      fpQuadNonRes a.x0
+                        then    mkFP2 (fpAddUnit) (fpSqrt (fpAddInv a.x0))
+                        else    mkFP2 (fpSqrt a.x0) (fpAddUnit)
+                else    if      (~isEven t.x0)
+                        then    fp2AddInv t
+                        else    t
+                where   t               =   if fpQuadNonRes z
+                                            then mkFP2 beta' (fpAddInv alpha')
+                                            else mkFP2 alpha' beta'
                         inv2            =   fpMultInv 2
-                        z               =   fpMult (fpAdd a0 (fpSqrt (norm a) ) ) inv2
-                        alpha'          =   fpPow z ( p + 1 >> 2 )
-                        beta'           =   fpMult (fpMult a1 (fpPow z ( p - 3 >> 2 )) ) inv2
+                        z               =   fpMult (fpAdd a.x0 (fpSqrt (norm a) ) ) inv2
+                        alpha'          =   fpPow z ( modulus + 1 >> 2 )
+                        beta'           =   fpMult (fpMult a.x1 (fpPow z ( modulus - 3 >> 2 )) ) inv2
 
-fp2QuadNonRes : [2][32] -> Bit
+fp2QuadNonRes : Fp2 -> Bit
 fp2QuadNonRes = norm ~~> fpQuadNonRes
 
 
@@ -203,14 +209,14 @@ fp2QuadNonRes = norm ~~> fpQuadNonRes
 // Elliptic Points and (Montgomery) curve data types.
 //
 
-type EllipticPoint = {x: [2][32], y: [2][32]}
+type EllipticPoint = {x: Fp2, y: Fp2}
 
-mkAffine : [2][32] -> [2][32] -> EllipticPoint
+mkAffine : Fp2 -> Fp2 -> EllipticPoint
 mkAffine x' y' = {x = x', y = y'}
 
-type MontgomeryCurve = { A: [2][32], B: [2][32]}
+type MontgomeryCurve = { A: Fp2, B: Fp2}
 
-mkMC : [2][32] -> [2][32] -> MontgomeryCurve
+mkMC : Fp2 -> Fp2 -> MontgomeryCurve
 mkMC a b = {A = a, B = b}
 
 verifyCurve : MontgomeryCurve -> Bit
@@ -218,7 +224,7 @@ verifyCurve C = fp2Cmp discrim fp2AddUnit
     where   discrim = fp2Mult C.B (fp2Subt (fp2Square C.A) (fp2Doub ~~> fp2Doub <~ fp2MultUnit) )
 
 pointAtInfinity : EllipticPoint
-pointAtInfinity = mkAffine [0x00000000, 0x00000000] [0x00000001, 0x00000000]
+pointAtInfinity = mkAffine (mkFP2 0x00000000 0x00000000) (mkFP2 0x00000001 0x00000000)
 
 isInfinite : EllipticPoint -> Bit
 isInfinite P = (fp2Cmp P.x pointAtInfinity.x) /\ (fp2Cmp P.y pointAtInfinity.y)
@@ -335,7 +341,7 @@ double_and_add C P n = bs ! 0
                         where bs = [pointAtInfinity] # [ if bit then xADD C P (xDBL C b) else xDBL C b | b <- bs | bit <- n ]
 
 // Algorithm 31
-j_inv : MontgomeryCurve ->  [2][32]
+j_inv : MontgomeryCurve ->  Fp2
 j_inv C = j
     where   t1  = fp2Square C.A
             t2  = fp2Add (fp2Doub fp2MultUnit) fp2MultUnit
@@ -584,7 +590,7 @@ iso_3_e_step k y = {S = S', C = C', Ps = Ps'}
             Ps' = map (eval_3_iso T) y.Ps
 
 // Algorithm 10
-get_A : [3][2][32] -> [2][32]
+get_A : [3]Fp2 -> Fp2
 get_A [xP, xQ, xR] = A
     where   t1  = fp2Add xP xQ
             t2  = fp2Mult xP xQ
@@ -602,7 +608,7 @@ get_A [xP, xQ, xR] = A
             A   = t13
 
 // Algorithm 40
-get_xR : MontgomeryCurve -> EllipticPoint -> EllipticPoint -> [2][32]
+get_xR : MontgomeryCurve -> EllipticPoint -> EllipticPoint -> Fp2
 get_xR C P Q = (xADD C P (mkAffine Q.x (fp2AddInv Q.y))).x
 
 // Algorithm 41
@@ -687,7 +693,7 @@ isogenWork (secretKeyAlice, secretKeyBob) = sharedSecretAlice == sharedSecretBob
         sharedSecretAlice   = isoex_2 publicKeyBob secretKeyAlice
         sharedSecretBob     = isoex_3 publicKeyAlice secretKeyBob
 
-property secretShared [a0, a1, b0, b1] = isoex_3 (isogen_2 [a0, a1]) [b0, b1] == isoex_2 (isogen_3 [b0, b1]) [a0, a1]
+// property secretShared [a0, a1, b0, b1] = isoex_3 (isogen_2 [a0, a1]) [b0, b1] == isoex_2 (isogen_3 [b0, b1]) [a0, a1]
 
 ///
 /// Tests
