@@ -607,7 +607,7 @@ get_xR C P Q = (xADD C P (mkAffine Q.x (fp2AddInv Q.y))).x
 
 // Algorithm 41
 get_yP_yQ_A_B : [24][8] -> (EllipticPoint, EllipticPoint, MontgomeryCurve)
-get_yP_yQ_A_B pk = (P, Q, C)
+get_yP_yQ_A_B pk = (P, Q', C)
     where   [xP, xQ, xR] = ostopk pk
             t1  = get_A [xP, xQ, xR]
             t2  = fp2MultUnit
@@ -629,6 +629,7 @@ get_yP_yQ_A_B pk = (P, Q, C)
             P   = mkAffine xP yP
             Q   = mkAffine xQ yQ
             yQ' = if ~( fp2Cmp (get_xR C P Q) xR ) then fp2AddInv yQ else yQ
+            Q'  = mkAffine xQ yQ'
 
 //
 // isogen_l and isoex_l for l in {2, 3}
