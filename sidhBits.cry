@@ -361,13 +361,13 @@ j_inv C = j
 //
 
 // Algorithm 32
-curve_2_iso : [2][32] -> MontgomeryCurve -> MontgomeryCurve
-curve_2_iso x2 C = {A = a', B = b'}
-    where   t1  = fp2Square x2
+curve_2_iso : EllipticPoint -> MontgomeryCurve -> MontgomeryCurve
+curve_2_iso T C = {A = a', B = b'}
+    where   t1  = fp2Square T.x
             t2  = fp2Doub t1
             t3  = fp2Subt fp2MultUnit t2
             t4  = fp2Doub t3
-            t5  = fp2Mult x2 C.B
+            t5  = fp2Mult T.x C.B
             a'  = t4
             b'  = t5
                             
@@ -376,18 +376,18 @@ curve_2_iso x2 C = {A = a', B = b'}
           
          
 // Algorithm 33
-eval_2_iso : [2][32] -> EllipticPoint -> EllipticPoint
-eval_2_iso x2 Q = Q'
+eval_2_iso : EllipticPoint -> EllipticPoint -> EllipticPoint
+eval_2_iso T Q = Q'
     where   (xQ, yQ) = (Q.x, Q.y)
-            t1  = fp2Mult xQ x2
+            t1  = fp2Mult xQ T.x
             t2  = fp2Mult xQ t1
-            t3  = fp2Mult t1 x2
+            t3  = fp2Mult t1 T.x
             t4  = fp2Doub t3
             t5  = fp2Subt t2 t4
-            t6  = fp2Add t5 x2
+            t6  = fp2Add t5 T.x
             t7  = fp2Mult yQ t6
             t8  = fp2Subt t2 xQ
-            t9  = fp2Subt xQ x2
+            t9  = fp2Subt xQ T.x
             t10 = fp2MultInv t9
             t11 = fp2Mult t8 t10
             t12 = fp2Square t10
@@ -400,16 +400,16 @@ eval_2_iso x2 Q = Q'
 // yQ':=yQ*(xQ^2*x2-2*xQ*x2^2+x2)/(xQ-x2)^2;
 
 // Algorithm 34
-curve_4_iso : [2][32] -> MontgomeryCurve -> MontgomeryCurve
-curve_4_iso x4 C = {A = a', B = b'}
-    where   t1  = fp2Square x4
+curve_4_iso : EllipticPoint -> MontgomeryCurve -> MontgomeryCurve
+curve_4_iso T C = {A = a', B = b'}
+    where   t1  = fp2Square T.x
             t2  = fp2Square t1
             t3  = fp2Doub t2
             t4  = fp2Doub t3
             t5  = fp2Doub fp2MultUnit
             t6  = fp2Subt t4 t5
-            t7  = fp2Mult x4 t1
-            t8  = fp2Add t7 x4
+            t7  = fp2Mult T.x t1
+            t8  = fp2Add t7 T.x
             t9  = fp2Mult t8 C.B
             t10 = fp2MultInv t5
             t11 = fp2AddInv t10
@@ -421,12 +421,12 @@ curve_4_iso x4 C = {A = a', B = b'}
 // b':== -(1/2)*(x4^3+x4)*b;
 
 // Algorithm 35
-eval_4_iso : [2][32] -> EllipticPoint -> EllipticPoint
-eval_4_iso x4 Q = Q'
+eval_4_iso : EllipticPoint -> EllipticPoint -> EllipticPoint
+eval_4_iso T Q = Q'
     where   (xQ, yQ) = (Q.x, Q.y)
             t1  = fp2Square xQ
             t2  = fp2Square t1
-            t3  = fp2Square x4
+            t3  = fp2Square T.x
             t4  = fp2Mult t2 t3
             t5  = fp2Add t2 t4
             t6  = fp2Mult t1 t3
@@ -440,12 +440,12 @@ eval_4_iso x4 Q = Q'
             t14 = fp2Doub t13
             t15 = fp2Add t11 t14
             t16 = fp2Mult t1 xQ
-            t17 = fp2Mult x4 t3
+            t17 = fp2Mult T.x t3
             t18 = fp2Mult t16 t17
             t19 = fp2Doub t18
             t20 = fp2Doub t19
             t21 = fp2Subt t15 t20
-            t22 = fp2Mult t16 x4 
+            t22 = fp2Mult t16 T.x 
             t23 = fp2Doub t22
             t24 = fp2Doub t23
             t25 = fp2Subt t21 t24
@@ -455,7 +455,7 @@ eval_4_iso x4 Q = Q'
             t29 = fp2Subt t25 t28
             t30 = fp2Add t29 t3
             t31 = fp2Add t30 fp2MultUnit
-            t32 = fp2Mult xQ x4
+            t32 = fp2Mult xQ T.x
             t33 = fp2Subt t32 fp2MultUnit
             t34 = fp2Doub t32
             t35 = fp2Doub t34
@@ -467,7 +467,7 @@ eval_4_iso x4 Q = Q'
             t41 = fp2AddInv t40
             t42 = fp2Subt t34 t3
             t43 = fp2Subt t42 fp2MultUnit
-            t44 = fp2Subt xQ x4
+            t44 = fp2Subt xQ T.x
             t45 = fp2Mult t44 t43
             t46 = fp2Square t45
             t47 = fp2Mult t46 t44
@@ -480,7 +480,7 @@ eval_4_iso x4 Q = Q'
             t54 = fp2Mult xQ t53
             t55 = fp2Mult xQ t3
             t56 = fp2Add t55 xQ
-            t57 = fp2Doub x4
+            t57 = fp2Doub T.x
             t58 = fp2Subt t56 t57
             t59 = fp2AddInv t58
             t60 = fp2Mult t54 t59
@@ -492,18 +492,18 @@ eval_4_iso x4 Q = Q'
 // yy:=y*x4^2*C*D/(B*B*B*A*A);
 
 // Algorithm 36
-curve_3_iso : [2][32] -> MontgomeryCurve -> MontgomeryCurve
-curve_3_iso x3 C = {A = a', B = b'}
-    where   t1  = fp2Square x3
+curve_3_iso : EllipticPoint -> MontgomeryCurve -> MontgomeryCurve
+curve_3_iso T C = {A = a', B = b'}
+    where   t1  = fp2Square T.x
             t2  = fp2Mult C.B t1
             t3  = fp2Doub t1
             t4  = fp2Doub t3
             t5  = fp2Add t3 t4
             t6  = fp2Doub <~ fp2Add (fp2Doub fp2MultUnit) fp2MultUnit
             t7  = fp2Subt t5 t6
-            t8  = fp2Mult C.A x3
+            t8  = fp2Mult C.A T.x
             t9  = fp2Subt t8 t7
-            t10 = fp2Mult t9 x3
+            t10 = fp2Mult t9 T.x
             a'  = t10
             b'  = t2
 
@@ -511,23 +511,24 @@ curve_3_iso x3 C = {A = a', B = b'}
 // b':=b*x3^2;
 
 // Algorithm 37
-eval_3_iso : [2][32] -> EllipticPoint -> EllipticPoint
-eval_3_iso x3 Q = Q'
-    where   (xQ, yQ) = (Q.x, Q.y)
+eval_3_iso : EllipticPoint -> EllipticPoint -> EllipticPoint
+eval_3_iso T Q = Q'
+    where   x3  = T.x
+            (xQ, yQ) = (Q.x, Q.y)
             t1  = fp2Square xQ
-            t2  = fp2Mult t1 x3
-            t3  = fp2Square x3
+            t2  = fp2Mult t1 T.x
+            t3  = fp2Square T.x
             t4  = fp2Mult xQ t3
             t5  = fp2Doub t4
             t6  = fp2Add t4 t5
             t7  = fp2Subt t2 t6
             t8  = fp2Add t7 xQ
-            t9  = fp2Add t8 x3
-            t10 = fp2Subt xQ x3
+            t9  = fp2Add t8 T.x
+            t10 = fp2Subt xQ T.x
             t11 = fp2MultInv t10
             t12 = fp2Square t11
             t13 = fp2Mult t11 t12
-            t14 = fp2Mult xQ x3
+            t14 = fp2Mult xQ T.x
             t15 = fp2Subt t14 fp2MultUnit
             t16 = fp2Mult t15 t9
             t17 = fp2Mult t16 t13
@@ -543,47 +544,44 @@ eval_3_iso x3 Q = Q'
 // yQ':=yQ*(xQ*x3-1)*(xQ^2*x3-3*xQ*x3^2+xQ+x3)/(xQ-x3)^3;
 
 // Algorithm 38
-iso_2_e : {n} (fin n) => EllipticPoint -> (MontgomeryCurve, [n]EllipticPoint) -> (MontgomeryCurve, [n]EllipticPoint)
+iso_2_e : {e, n} (fin e, e >= 4, fin n) => EllipticPoint -> (MontgomeryCurve, [n]EllipticPoint) -> (MontgomeryCurve, [n]EllipticPoint)
 iso_2_e S' (C', Ps') = (C'', Ps'')
     where   init = {S = S', C = C', Ps = Ps'}
-            init' = iso_2_e_odd_step 14 init
-            ms = [12, 10 .. 0]
-            ys = [init'] # [ iso_2_e_step m y | m <- ms | y <- ys ]
+            init' = if (`e ) % (2 : [width e]) == 0 then init else iso_2_e_odd_step`{width e} (`e - 1) init
+            ms = reverse [0, 2 .. e - 2]
+            ys = [init'] # [ iso_2_e_step`{width e} m y | m <- ms | y <- ys ]
             final_y = ys ! 0
             (C'', Ps'') = (final_y.C, final_y.Ps)
 
-iso_2_e_odd_step : {n} (fin n) => [4] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
+iso_2_e_odd_step : {m, n} (fin m, fin n) => [m] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
 iso_2_e_odd_step k y = {S = S', C = C', Ps = Ps'}
     where   T   = xDBLe k y.C y.S
-            xT  = if isInfinite T then undefined else T.x
-            S'  = eval_2_iso xT y.S
-            C'  = curve_2_iso xT y.C
-            Ps' = map (eval_2_iso xT) y.Ps
+            S'  = eval_2_iso T y.S
+            C'  = curve_2_iso T y.C
+            Ps' = map (eval_2_iso T) y.Ps
 
-iso_2_e_step : {n} (fin n) => [4] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
+iso_2_e_step : {m, n} (fin m, fin n) => [m] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
 iso_2_e_step k y = {S = S', C = C', Ps = Ps'}
     where   T   = xDBLe k y.C y.S
-            xT  = if isInfinite T then undefined else T.x
-            S'  = eval_4_iso xT y.S
-            C'  = curve_4_iso xT y.C
-            Ps' = map (eval_4_iso xT) y.Ps
+            S'  = eval_4_iso T y.S
+            C'  = curve_4_iso T y.C
+            Ps' = map (eval_4_iso T) y.Ps
 
 // Algorithm 39
-iso_3_e : {n} (fin n) => EllipticPoint -> (MontgomeryCurve, [n]EllipticPoint) -> (MontgomeryCurve, [n]EllipticPoint)
+iso_3_e : {e, n} (fin e, e >= 1, fin n) => EllipticPoint -> (MontgomeryCurve, [n]EllipticPoint) -> (MontgomeryCurve, [n]EllipticPoint)
 iso_3_e S' (C', Ps') = (C'', Ps'')
     where   init = {S = S', C = C', Ps = Ps'}
-            ms = [7, 6 .. 0]
-            ys = [init] # [ iso_3_e_step m y | m <- ms | y <- ys ]
+            ms = reverse [0 .. e - 1]
+            ys = [init] # [ iso_3_e_step`{width e} m y | m <- ms | y <- ys ]
             final_y = ys ! 0
             (C'', Ps'') = (final_y.C, final_y.Ps)
 
-iso_3_e_step : {n} (fin n) => [3] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
+iso_3_e_step : {m, n} (fin m, fin n) => [m] -> {S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint} -> { S: EllipticPoint, C: MontgomeryCurve, Ps: [n]EllipticPoint }
 iso_3_e_step k y = {S = S', C = C', Ps = Ps'}
     where   T = xTPLe k y.C y.S
-            xT = if isInfinite T then undefined else T.x
-            S' = eval_3_iso xT y.S
-            C' = curve_3_iso xT y.C
-            Ps' = map (eval_3_iso xT) y.Ps
+            S' = eval_3_iso T y.S
+            C' = curve_3_iso T y.C
+            Ps' = map (eval_3_iso T) y.Ps
 
 // Algorithm 10
 get_A : [3][2][32] -> [2][32]
@@ -641,7 +639,7 @@ isogen_2 : [2][8] -> [24][8]
 isogen_2 sk2 = pk2
     where   exponent = (reverse ~~> join) sk2
             S = xADD startingCurve param_P2 (double_and_add startingCurve param_Q2 exponent )
-            (C, [P3', Q3']) = iso_2_e S (startingCurve, [param_P3, param_Q3])
+            (C, [P3', Q3']) = iso_2_e`{15} S (startingCurve, [param_P3, param_Q3])
             xP3' = P3'.x
             xQ3' = Q3'.x
             xR3' = get_xR C P3' Q3'
@@ -652,7 +650,7 @@ isogen_3 : [2][8] -> [24][8]
 isogen_3 sk3 = pk3
     where   exponent = (reverse ~~> join) sk3
             S = xADD startingCurve param_P3 (double_and_add startingCurve param_Q3 exponent)
-            (C, [P2', Q2']) = iso_3_e S (startingCurve, [param_P2, param_Q2])
+            (C, [P2', Q2']) = iso_3_e`{8} S (startingCurve, [param_P2, param_Q2])
             xP2' = P2'.x
             xQ2' = Q2'.x
             xR2' = get_xR C P2' Q2'
@@ -665,7 +663,7 @@ isoex_2 pk3 sk2 = j2
             [xP2', xQ2', xR2'] = ostopk pk3
             (P2', Q2', C) = get_yP_yQ_A_B pk3
             S = xADD C P2' (double_and_add C Q2' exponent)
-            (C', _) = iso_2_e S (C, [])
+            (C', _) = iso_2_e`{15} S (C, [])
             j2 = fp2toos <~ j_inv C'
 
 
@@ -676,7 +674,7 @@ isoex_3 pk2 sk3 = j3
             [xP3', xQ3', xR3'] = ostopk pk2
             (P3', Q3', C) = get_yP_yQ_A_B pk2
             S = xADD C P3' (double_and_add C Q3' exponent)
-            (C', _) = iso_3_e S (C, [])
+            (C', _) = iso_3_e`{8} S (C, [])
             j3 = fp2toos <~ j_inv C'
 
 

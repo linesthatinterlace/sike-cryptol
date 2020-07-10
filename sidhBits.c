@@ -682,15 +682,6 @@ void get_yP_yQ_A_B(const sike_public_key_t *pk, mont_pt_t *P, mont_pt_t *Q, mont
   mont_pt_clear(&T);
 }
 
-// Pretty printing
-static void printPoint (const mont_pt_t P) {
-    printf("{x = [0x%08x, 0x%08x], y = [0x%08x, 0x%08x]}\n", *P.x.x0, *P.x.x1, *P.y.x0, *P.y.x1);
-}
-
-static void printCurve (const mont_curve_int_t C) {
-    printf("{a = [0x%08x, 0x%08x], b = [0x%08x, 0x%08x]}\n", *C.a.x0, *C.a.x1, *C.b.x0, *C.b.x1);
-}
-
 // PARAMS
 
 const sidh_params_raw_t sidhRawParams = {
@@ -752,22 +743,397 @@ void sidh_teardown_params(sidh_params_t *params) {
     mont_pt_clear(param_Q3);
 }
 
+
+// ISOGENIES
+
+void eval_2_iso(const mont_pt_t *P2, const mont_pt_t *P, mont_pt_t *isoP) {
+
+  const fp2* x2 = &P2->x;
+  const fp2* x = &P->x;
+  const fp2* y = &P->y;
+  fp2* xx = &isoP->x;
+  fp2* yy = &isoP->y;
+
+  // xx:=(x^2*x2-x)/(x-x2);
+  // yy:=y*(x^2*x2-2*x*x2^2+x2)/(x-x2)^2;
+
+  fp2 t1 = { 0 }, t2 = { 0 }, t3 = { 0 }, one = { 0 };
+  fp2_Init(&t1);
+  fp2_Init(&t2);
+  fp2_Init(&t3);
+  fp2_Init_set(&one, 1, 0);
+
+  fp2_Multiply(x, x2, &t1);         // t1:=x*x2;  // t1 = x*x2
+  fp2_Multiply(x, &t1, &t2);        // t2:=x*t1;  // t2 = x^2*x2
+  fp2_Multiply(&t1, x2, &t3);       // t3:=t1*x2; // t3 = x*x2^2
+  fp2_Add(&t3, &t3, &t3);           // t3:=t3+t3; // t3 = 2*x*x2^2
+  fp2_Sub(&t2, &t3, &t3);           // t3:=t2-t3; // t3 = x^2*x2-2*x*x2^2
+  fp2_Add(&t3, x2, &t3);            // t3:=t3+x2; // t3 = x^2*x2-2*x*x2^2+x2
+  fp2_Multiply(y, &t3, &t3);        // t3:=y*t3;  // t3 = y*(x^2*x2-2*x*x2^2+x2)
+  fp2_Sub(&t2, x, &t2);             // t2:=t2-x;  // t2 = x^2*x2-x
+  fp2_Sub(x, x2, &t1);              // t1:=x-x2;  // t1 = x-x2
+  fp2_Invert(&t1, &t1);             // t1:=1/t1;  // t1 = 1/(x-x2)
+  fp2_Multiply(&t2, &t1, xx);       // xx:=t2*t1; // xx = (x^2*x2-x)/(x-x2)
+  fp2_Square(&t1, &t1);             // t1:=t1^2;  // t1 = 1/(x-x2)^2
+  fp2_Multiply(&t3, &t1, yy);       // yy:=t3*t1; // yy = y*(x^2*x2-2*x*x2^2+x2)/(x-x2)^2
+
+  fp2_Clear(&t1);
+  fp2_Clear(&t2);
+  fp2_Clear(&t3);
+  fp2_Clear(&one);
+}
+
+void curve_2_iso(const mont_pt_t *P2, const mont_curve_int_t *E, mont_curve_int_t *isoE) {
+
+  // aa:=2*(1-2*x2^2);
+  // bb:=x2*b;
+
+  const fp2* x2 = &P2->x;
+  //const fp2* a = &E->a;
+  const fp2* b = &E->b;
+
+  fp2* aa = &isoE->a;
+  fp2* bb = &isoE->b;
+
+  fp2 t1 = { 0 }, one = { 0 };
+  fp2_Init(&t1);
+  fp2_Init_set(&one, 1, 0);
+
+  fp2_Square(x2, &t1);     // t1 = x2^2
+  fp2_Add(&t1, &t1, &t1);  // t1 = 2*x2^2
+  fp2_Sub(&one, &t1, &t1); // t1 = 1-2*x2^2
+  fp2_Add(&t1, &t1, aa);   // aa = 2*(1-2*x2^2)
+  fp2_Multiply(x2, b, bb); // bb = x2*b
+
+  fp2_Clear(&t1);
+}
+
+void eval_3_iso(const mont_pt_t *P3, const mont_pt_t *P, mont_pt_t *isoP) {
+
+  const fp2* x3 = &P3->x;
+  const fp2* x = &P->x;
+  const fp2* y = &P->y;
+
+  // xx:=x*(x*x3-1)^2/(x-x3)^2;
+  // yy:=y*(x*x3-1)*(x^2*x3-3*x*x3^2+x+x3)/(x-x3)^3;
+
+  fp2 t1 = { 0 }, t2 = { 0 }, t3 = { 0 }, t4 = { 0 }, one = { 0 };
+  fp2_Init(&t1);
+  fp2_Init(&t2);
+  fp2_Init(&t3);
+  fp2_Init(&t4);
+  fp2_Init_set(&one, 1, 0);
+
+  fp2_Square(x, &t1);             // t1 = x^2
+  fp2_Multiply(&t1, x3, &t1);     // t1 = x^2*x3
+  fp2_Square(x3, &t2);            // t2 = x3^2
+  fp2_Multiply(x, &t2, &t2);      // t2 = x*x3^2
+  fp2_Add(&t2, &t2, &t3);         // t3 = 2*x*x3^2
+  fp2_Add(&t2, &t3, &t2);         // t2 = 3*x*x3^2
+  fp2_Sub(&t1, &t2, &t1);         // t1 = x^2*x3-3*x*x3^2
+  fp2_Add(&t1, x, &t1);           // t1 = x^2*x3-3*x*x3^2+x
+  fp2_Add(&t1, x3, &t1);          // t1 = x^2*x3-3*x*x3^2+x+x3
+
+  fp2_Sub(x, x3, &t2);            // t2 = x-x3
+  fp2_Invert(&t2, &t2);           // t2 = 1/(x-x3)
+  fp2_Square(&t2, &t3);           // t3 = 1/(x-x3)^2
+  fp2_Multiply(&t2, &t3, &t2);    // t2 = 1/(x-x3)^3
+
+  fp2_Multiply(x, x3, &t4);       // t4 = x*x3
+  fp2_Sub(&t4, &one, &t4);        // t4 = x*x3-1
+
+  fp2_Multiply(&t4, &t1, &t1);    // t1 = (x*x3-1)*(x^2*x3-3*x*x3^2+x+x3)
+  fp2_Multiply(&t1, &t2, &t1);    // t1 = (x*x3-1)*(x^2*x3-3*x*x3^2+x+x3)/(x-x3)^3
+
+  fp2_Square(&t4, &t2);           // t2 = (x*x3-1)^2
+  fp2_Multiply(&t2, &t3, &t2);    // t2 = (x*x3-1)^2/(x-x3)^2
+
+  fp2_Multiply(x, &t2, &isoP->x); // xx = x*(x*x3-1)^2/(x-x3)^2
+  fp2_Multiply(y, &t1, &isoP->y); // yy = y*(x*x3-1)*(x^2*x3-3*x*x3^2+x+x3)/(x-x3)^3
+
+  fp2_Clear(&t1);
+  fp2_Clear(&t2);
+  fp2_Clear(&t3);
+  fp2_Clear(&t4);
+  fp2_Clear(&one);
+}
+
+void curve_3_iso(const mont_pt_t *P3, const mont_curve_int_t *E, mont_curve_int_t *isoE) {
+
+  // aa:=(a*x3-6*x3^2+6)*x3;
+  // bb:=b*x3^2;
+
+  const fp2* x3 = &P3->x;
+  const fp2* a = &E->a;
+  const fp2* b = &E->b;
+  fp2* aa = &isoE->a;
+  fp2* bb = &isoE->b;
+
+  fp2 t1 = { 0 }, t2 = { 0 };
+  fp2_Init(&t1);
+  fp2_Init(&t2);
+
+  fp2_Square(x3, &t1);         // t1 = x3^2
+  fp2_Multiply(b, &t1, bb);    // bb = b*x3^2
+
+  fp2_Add(&t1, &t1, &t1);      // t1 = 2*x3^2
+  fp2_Add(&t1, &t1, &t2);      // t2 = 4*x3^2
+  fp2_Add(&t1, &t2, &t1);      // t1 = 6*x3^2
+  fp2_Set(&t2, 6, 0);          // t2 = 6
+  fp2_Sub(&t1, &t2, &t1);      // t1 = 6*x3^2-6
+  fp2_Multiply(a, x3, &t2);    // t2 = a*x3
+  fp2_Sub(&t2, &t1, &t1);      // t1 = a*x3-6*x3^2+6
+  fp2_Multiply(&t1, x3, aa);   // aa = (a*x3-6*x3^2+6)*x3
+
+  fp2_Clear(&t1);
+  fp2_Clear(&t2);
+}
+
+void eval_4_iso(const mont_pt_t *P4, const mont_pt_t *P, mont_pt_t *isoP) {
+
+  const fp2* x4 = &P4->x;
+  const fp2* x = &P->x;
+  const fp2* y = &P->y;
+  fp2* xx = &isoP->x;
+  fp2* yy = &isoP->y;
+
+  fp2 t1 = { 0 }, t2 = { 0 }, t3 = { 0 }, t4 = { 0 }, t5 = { 0 }, one = { 0 };
+  fp2_Init(&t1);
+  fp2_Init(&t2);
+  fp2_Init(&t3);
+  fp2_Init(&t4);
+  fp2_Init(&t5);
+  fp2_Init_set(&one, 1, 0);
+
+  // xx:=-(x*x4^2+x-2*x4)*x*(x*x4-1)^2/((x-x4)^2*(2*x*x4-x4^2-1));
+  // yy:=-2*y*x4^2*(x*x4-1)*(x^4*x4^2-4*x^3*x4^3+2*x^2*x4^4+x^4-4*x^3*x4+10*x^2*x4^2-4*x*x4^3-4*x*x4+x4^2+1)/((x-x4)^3*(2*x*x4-x4^2-1)^2);
+
+  fp2_Square(x, &t1);             // t1 = x^2
+  fp2_Square(&t1, &t2);           // t2 = x^4
+  fp2_Square(x4, &t3);            // t3 = x4^2
+  fp2_Multiply(&t2, &t3, &t4);    // t4 = x^4*x4^2
+  fp2_Add(&t2, &t4, &t2);         // t2 = x^4+x^4*x4^2
+  fp2_Multiply(&t1, &t3, &t4);    // t4 = x^2*x4^2
+  fp2_Add(&t4, &t4, &t4);         // t4 = 2*x^2*x4^2
+  fp2_Add(&t4, &t4, &t5);         // t5 = 4*x^2*x4^2
+  fp2_Add(&t5, &t5, &t5);         // t5 = 8*x^2*x4^2
+  fp2_Add(&t4, &t5, &t4);         // t4 = 10*x^2*x4^2
+  fp2_Add(&t2, &t4, &t2);         // t2 = x^4+x^4*x4^2+10*x^2*x4^2
+  fp2_Multiply(&t3, &t3, &t4);    // t4 = x4^4
+  fp2_Multiply(&t1, &t4, &t5);    // t5 = x^2*x4^4
+  fp2_Add(&t5, &t5, &t5);         // t5 = 2*x^2*x4^4
+  fp2_Add(&t2, &t5, &t2);         // t2 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4
+  fp2_Multiply(&t1, x, &t1);      // t1 = x^3
+  fp2_Multiply(x4, &t3, &t4);     // t4 = x4^3
+  fp2_Multiply(&t1, &t4, &t5);    // t5 = x^3*x4^3
+  fp2_Add(&t5, &t5, &t5);         // t5 = 2*x^3*x4^3
+  fp2_Add(&t5, &t5, &t5);         // t5 = 4*x^3*x4^3
+  fp2_Sub(&t2, &t5, &t2);         // t2 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3
+  fp2_Multiply(&t1, x4, &t1);     // t1 = x^3*x4
+  fp2_Add(&t1, &t1, &t1);         // t1 = 2*x^3*x4
+  fp2_Add(&t1, &t1, &t1);         // t1 = 4*x^3*x4
+  fp2_Sub(&t2, &t1, &t1);         // t1 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4
+  fp2_Multiply(x, &t4, &t2);      // t2 = x*x4^3
+  fp2_Add(&t2, &t2, &t2);         // t2 = 2*x*x4^3
+  fp2_Add(&t2, &t2, &t2);         // t2 = 4*x*x4^3
+  fp2_Sub(&t1, &t2, &t1);         // t1 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3
+  fp2_Add(&t1, &t3, &t1);         // t1 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2
+  fp2_Add(&t1, &one, &t1);        // t1 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1
+  fp2_Multiply(x, x4, &t2);       // t2 = x*x4
+  fp2_Sub(&t2, &one, &t4);        // t4 = x*x4-1
+  fp2_Add(&t2, &t2, &t2);         // t2 = 2*x*x4
+  fp2_Add(&t2, &t2, &t5);         // t5 = 4*x*x4
+  fp2_Sub(&t1, &t5, &t1);         // t1 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4
+
+  fp2_Multiply(&t4, &t1, &t1);    // t1 = (x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
+  fp2_Multiply(&t3, &t1, &t1);    // t1 = x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
+  fp2_Multiply(y, &t1, &t1);      // t1 = x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
+  fp2_Add(&t1, &t1, &t1);         // t1 = 2*x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
+  fp2_Negative(&t1, yy);          // yy = -2*x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
+
+  fp2_Sub(&t2, &t3, &t2);         // t2 = 2*x*x4-x4^2
+  fp2_Sub(&t2, &one, &t1);        // t1 = 2*x*x4-x4^2-1
+  fp2_Sub(x, x4, &t2);            // t2 = x-x4
+  fp2_Multiply(&t2, &t1, &t1);    // t1 = (x-x4)*(2*x*x4-x4^2-1)
+  fp2_Square(&t1, &t5);           // t5 = (x-x4)^2*(2*x*x4-x4^2-1)^2
+  fp2_Multiply(&t5, &t2, &t5);    // t5 = (x-x4)^3*(2*x*x4-x4^2-1)^2
+  fp2_Invert(&t5, &t5);           // t5 = 1/((x-x4)^3*(2*x*x4-x4^2-1)^2)
+  fp2_Multiply(yy, &t5, yy);      // yy = -2*x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)/((x-x4)^3*(2*x*x4-x4^2-1)^2)
+
+  fp2_Multiply(&t1, &t2, &t1);    // t1 = (x-x4)^2*(2*x*x4-x4^2-1)
+  fp2_Invert(&t1, &t1);           // t1 = 1/((x-x4)^2*(2*x*x4-x4^2-1))
+  fp2_Square(&t4, &t4);           // t4 = (x*x4-1)^2
+  fp2_Multiply(&t1, &t4, &t1);    // t1 = (x*x4-1)^2/((x-x4)^2*(2*x*x4-x4^2-1))
+  fp2_Multiply(x, &t1, &t1);      // t1 = x*(x*x4-1)^2/((x-x4)^2*(2*x*x4-x4^2-1))
+  fp2_Multiply(x, &t3, &t2);      // t2 = x*x4^2
+  fp2_Add(&t2, x, &t2);           // t2 = x*x4^2+x
+  fp2_Add(x4, x4, &t3);           // t3 = 2*x4
+  fp2_Sub(&t2, &t3, &t2);         // t2 = x*x4^2+x-2*x4
+  fp2_Negative(&t2, &t2);         // t2 = -(x*x4^2+x-2*x4)
+  fp2_Multiply(&t1, &t2, xx);     // xx = -(x*x4^2+x-2*x4)*x*(x*x4-1)^2/((x-x4)^2*(2*x*x4-x4^2-1))
+
+  fp2_Clear(&t1);
+  fp2_Clear(&t2);
+  fp2_Clear(&t3);
+  fp2_Clear(&t4);
+  fp2_Clear(&t5);
+  fp2_Clear(&one);
+
+}
+
+void curve_4_iso(const mont_pt_t *P4, const mont_curve_int_t *E, mont_curve_int_t *isoE) {
+
+  const fp2 *x4 = &P4->x;
+  //const fp2 *a = &E->coeff.a;
+  const fp2 *b = &E->b;
+  fp2 *aa = &isoE->a;
+  fp2 *bb = &isoE->b;
+
+  fp2 t1 = {0}, t2 = {0};
+  fp2_Init(&t1);
+  fp2_Init(&t2);
+
+  // aa:=4*x4^4-2;
+  // bb:=-(1/2)*x4*(x4^2+1)*b = -(1/2)*(x4^3+x4)*b;
+
+  fp2_Square(x4, &t1);         // t1 = x4^2
+  fp2_Square(&t1, aa);         // aa = x4^4
+  fp2_Add(aa, aa, aa);         // aa = 2*x4^4
+  fp2_Add(aa, aa, aa);         // aa = 4*x4^4
+  fp2_Set(&t2, 2, 0);          // t2 = 2
+  fp2_Sub(aa, &t2, aa);        // aa = 4*x4^4-2
+
+  fp2_Multiply(x4, &t1, &t1);  // t1 = x4^3
+  fp2_Add(&t1, x4, &t1);       // t1 = x4^3+x4
+  fp2_Multiply(&t1, b, &t1);   // t1 = (x4^3+x4)*b
+  fp2_Invert(&t2, &t2);        // t2 = 1/2 -> precompute
+  fp2_Negative(&t2, &t2);      // t2 = -(1/2)
+  fp2_Multiply(&t2, &t1, bb);
+
+  fp2_Clear(&t1);
+  fp2_Clear(&t2);
+}
+
+void iso_2_e(int e, const mont_curve_int_t *E, mont_pt_t *S, const mont_pt_t *P1, const mont_pt_t *P2, mont_curve_int_t *isoE, mont_pt_t *isoP1, mont_pt_t *isoP2) {
+
+  int p1Eval = P1 != NULL, p2Eval = P2 != NULL;
+
+  mont_pt_t T = { 0 };
+  mont_pt_init(&T);
+  mont_curve_copy(E, isoE);
+
+  if (p1Eval)
+    mont_pt_copy(P1, isoP1);
+
+  if (p2Eval)
+    mont_pt_copy(P2, isoP2);
+
+
+  if (e % 2) {
+    xDBLe(isoE, S, e - 1, &T);
+    curve_2_iso(&T, isoE, isoE);
+    eval_2_iso(&T, S, S);
+
+    if (p1Eval)
+      eval_2_iso(&T, isoP1, isoP1);
+
+    if (p2Eval)
+      eval_2_iso(&T, isoP2, isoP2);
+
+    e--;
+  }
+
+  for (int i = e - 2; i >= 0; i -= 2) {
+    xDBLe(isoE, S, i, &T);
+    curve_4_iso(&T, isoE, isoE);
+
+    eval_4_iso(&T, S, S);
+
+    if (p1Eval)
+      eval_4_iso(&T, isoP1, isoP1);
+
+    if (p2Eval)
+      eval_4_iso(&T, isoP2, isoP2);
+  }
+
+  mont_pt_clear(&T);
+}
+
+void iso_3_e(int e, const mont_curve_int_t *E, mont_pt_t *S, const mont_pt_t *P1, const mont_pt_t *P2, mont_curve_int_t *isoE, mont_pt_t *isoP1, mont_pt_t *isoP2) {
+
+  int p1Eval = P1 != NULL, p2Eval = P2 != NULL;
+
+  mont_pt_t T = { 0 };
+  mont_pt_init(&T);
+  mont_curve_copy(E, isoE);
+
+  if (p1Eval)
+    mont_pt_copy(P1, isoP1);
+
+  if (p2Eval)
+    mont_pt_copy(P2, isoP2);
+
+  for (int i = e - 1; i >= 0; --i) {
+    xTPLe(isoE, S, i, &T);
+    curve_3_iso(&T, isoE, isoE);
+
+    eval_3_iso(&T, S, S);
+
+    if (p1Eval)
+      eval_3_iso(&T, isoP1, isoP1);
+
+    if (p2Eval)
+      eval_3_iso(&T, isoP2, isoP2);
+  
+  }
+
+  mont_pt_clear(&T);
+}
+
+
+
+// Pretty printing
+static void printPoint (const mont_pt_t P) {
+    printf("{x = [0x%08x, 0x%08x], y = [0x%08x, 0x%08x]}\n", *P.x.x0, *P.x.x1, *P.y.x0, *P.y.x1);
+}
+
+static void printCurve (const mont_curve_int_t C) {
+    printf("{a = [0x%08x, 0x%08x], b = [0x%08x, 0x%08x]}\n", *C.a.x0, *C.a.x1, *C.b.x0, *C.b.x1);
+}
+
+
 int main () {
     sidh_params_t * params;
     sidh_setup_params(&sidhRawParams, params);
-
+    
     mont_pt_t R;
     mont_pt_init(&R);
-    xTPLe(&params->startingCurve, &params->param_P2, 3, &R);
-    xDBL(&params->startingCurve, &R, &R);
-    printPoint(R);
+    mont_pt_t iP1;
+    mont_pt_init(&iP1);
+    mont_pt_t iP2;
+    mont_pt_init(&iP2);
+    mont_curve_int_t C;
+    mont_curve_init(&C);
+    mp i;
+    fp_Init(&i);
+    fp_Constant(4, i);
+    mont_double_and_add(&params->startingCurve, i, &params->param_Q2, &R, 31);
+    xADD(&params->startingCurve, &R, &params->param_P2, &R);
+    iso_2_e(15, &params->startingCurve, &R, &params->param_P3, &params->param_Q3, &C, &iP1, &iP2);
+    printCurve(C);
+    printPoint(iP1);
+    printPoint(iP2);
     sidh_teardown_params(params);
-
-    //([0x059b82e8, 0x088b9191], [0x059c61d3, 0x05d40635])
-    //{x = [0x0ae9843c, 0x070b0606], y = [0x01ce3675, 0x046f70f6]}
-   // printf("0x%08x\n", *i);
 
     return 0;
 }
-
+/*
+sidh32> let S = xADD startingCurve param_P3 (double_and_add startingCurve param_Q3 4)
+[warning] at <interactive>:1:38--1:52:
+  Defaulting type argument 'n' of 'double_and_add' to 3
+sidh32> iso_3_e S (startingCurve, [param_P2, param_Q2])
+({A = [0x02240ecd, 0x014eab54], B = [0x099b0a56, 0x0aec096b]},
+ [{x = [0x03623611, 0x00d0dae5], y = [0x05b0ece0, 0x05492c58]},
+  {x = [0x031f6418, 0x003736ba], y = [0x0cb1647c, 0x07da285b]}])
+  */
 

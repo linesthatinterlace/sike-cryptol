@@ -191,3 +191,35 @@ void sidh_setup_params(const sidh_params_raw_t *raw, sidh_params_t *params);
 void sidh_teardown_params(sidh_params_t *params);
 
 extern const sidh_params_raw_t sidhRawParams;
+
+// ISOGENIES
+
+void eval_2_iso(const mont_pt_t *P2, const mont_pt_t *P, mont_pt_t *isoP);
+
+void curve_2_iso(const mont_pt_t *P2, const mont_curve_int_t *E, mont_curve_int_t *isoE);
+
+
+void eval_3_iso(const mont_pt_t *P3, const mont_pt_t *P, mont_pt_t *isoP);
+
+
+void curve_3_iso(const mont_pt_t *P3, const mont_curve_int_t *E, mont_curve_int_t *isoE);
+
+
+void eval_4_iso(const mont_pt_t *P4, const mont_pt_t *P, mont_pt_t *isoP);
+
+
+void curve_4_iso(const mont_pt_t *P4, const mont_curve_int_t *E, mont_curve_int_t *isoE);
+
+void iso_2_e(int e, const mont_curve_int_t *E, mont_pt_t *S, const mont_pt_t *P1, const mont_pt_t *P2, mont_curve_int_t *isoE, mont_pt_t *isoP1, mont_pt_t *isoP2);
+
+void iso_3_e(int e, const mont_curve_int_t *E, mont_pt_t *S, const mont_pt_t *P1, const mont_pt_t *P2, mont_curve_int_t *isoE, mont_pt_t *isoP1, mont_pt_t *isoP2);
+
+
+// SIDH 
+
+void sidh_sk_keygen(const sike_params_t* params, party_t party, sike_private_key sk);
+
+
+void sidh_isogen(const sike_params_t *params, sike_public_key_t *pk, const sike_private_key sk, party_t party);
+
+void sidh_isoex(const sike_params_t *params, const sike_public_key_t *pkO, const sike_private_key skI, party_t party, fp2 *secret);
