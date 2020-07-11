@@ -693,7 +693,19 @@ isogenWork (secretKeyAlice, secretKeyBob) = sharedSecretAlice == sharedSecretBob
         sharedSecretAlice   = isoex_2 publicKeyBob secretKeyAlice
         sharedSecretBob     = isoex_3 publicKeyAlice secretKeyBob
 
-// property secretShared [a0, a1, b0, b1] = isoex_3 (isogen_2 [a0, a1]) [b0, b1] == isoex_2 (isogen_3 [b0, b1]) [a0, a1]
+gen3ex2 : [16] -> [16] -> Fp2
+gen3ex2 a b = ostofp2 z
+    where z = isoex_2 (isogen_3 sk3) sk2
+          sk2 = (split ~~> reverse) a
+          sk3 = (split ~~> reverse) b
+
+gen2ex3 : [16] -> [16] -> Fp2
+gen2ex3 a b = ostofp2 z
+    where z = isoex_3 (isogen_2 sk2) sk3
+          sk2 = (split ~~> reverse) a
+          sk3 = (split ~~> reverse) b
+
+property secretShared a b = gen3ex2 a b == gen2ex3 a b
 
 ///
 /// Tests

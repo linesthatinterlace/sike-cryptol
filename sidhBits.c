@@ -7,38 +7,38 @@
 
 //FP
 
-void fp_Add(const mp a, const mp b, mp c) {
+void fp_Add(const fp a, const fp b, fp c) {
     *c = (uint32_t)( ((uint64_t)*a + (uint64_t)*b ) % (uint64_t)MODULUS );
 }
 
-void fp_Clear(mp* q) {
+void fp_Clear(fp* q) {
     free(*q);
 }
 
 
-void fp_Constant(unsigned long a, mp b) {
+void fp_Constant(uint32_t a, fp b) {
     *b = a % MODULUS;
 }
 
-void fp_Copy(mp dst, const mp src) {
+void fp_Copy(fp dst, const fp src) {
     memcpy(dst, src, 8);
 }
 
-void fp_Init (mp* q) {
+void fp_Init (fp* q) {
     *q = calloc(1, 8);
 }
 
-int fp_IsEqual(const mp a, const mp b) {
+int fp_IsEqual(const fp a, const fp b) {
     return (*a % MODULUS) == (*b % MODULUS);
 }
 
 
-int fp_IsEven(const mp a) {
+int fp_IsEven(const fp a) {
     return !fp_IsBitSet(a, 0);
 }
 
-void fp_Invert(const mp a, mp b) {
-    mp t1;
+void fp_Invert(const fp a, fp b) {
+    fp t1;
     fp_Init(&t1);
     fp_Constant(MODULUS - 2, t1);
     fp_Pow(a, t1, b);
@@ -46,29 +46,29 @@ void fp_Invert(const mp a, mp b) {
 }
 
 
-int fp_IsBitSet(const mp a, const unsigned long index) {
+int fp_IsBitSet(const fp a, const int index) {
     return (*a & ( 1 << index )) >> index;
 }
 
-int fp_IsConstant(const mp a, const size_t constant) {
+int fp_IsConstant(const fp a, const size_t constant) {
     return (*a % MODULUS) == (constant % MODULUS);
 }
 
-void fp_Multiply(const mp a, const mp b, mp c) {
+void fp_Multiply(const fp a, const fp b, fp c) {
     *c = (uint32_t)( ((uint64_t)*a * (uint64_t)*b ) % (uint64_t)MODULUS);
 }
 
 
-void fp_Negative(const mp a, mp b) {
-    mp t1, t2;
+void fp_Negative(const fp a, fp b) {
+    fp t1, t2;
     fp_Init(&t1);
     fp_Constant(*a, t1);
     *b = (*t1 == 0) ? 0 : MODULUS - (*a % MODULUS);
     fp_Clear(&t1);
 }
 
-void fp_Pow(const mp a, const mp b, mp c) {
-    mp t1;
+void fp_Pow(const fp a, const fp b, fp c) {
+    fp t1;
     fp_Init(&t1);
     fp_Unity(t1);
     for (int i = 31; i >= 0; i--)
@@ -84,8 +84,8 @@ void fp_Pow(const mp a, const mp b, mp c) {
 }
 
 
-int fp_QuadNonRes(const mp a) {
-    mp t1, t2;
+int fp_QuadNonRes(const fp a) {
+    fp t1, t2;
     fp_Init(&t1);
     fp_Init(&t2);
     fp_Sqrt(a, t1);
@@ -93,12 +93,12 @@ int fp_QuadNonRes(const mp a) {
     if ( fp_IsEqual(a, t1) ) return 0 ; else return 1;
 }
 
-void fp_Square(const mp a, mp b) {
+void fp_Square(const fp a, fp b) {
     fp_Multiply(a, a, b);
 }
 
-void fp_Sqrt(const mp a, mp b) {
-    mp t1, p14;
+void fp_Sqrt(const fp a, fp b) {
+    fp t1, p14;
     fp_Init(&p14);
     fp_Init(&t1);
     
@@ -115,19 +115,19 @@ void fp_Sqrt(const mp a, mp b) {
 
 }
 
-void fp_Subtract(const mp a, const mp b, mp c) {
-    mp t1;
+void fp_Subtract(const fp a, const fp b, fp c) {
+    fp t1;
     fp_Init(&t1);
     fp_Negative(b, t1);
     fp_Add(a, t1, c);
     fp_Clear(&t1);
 }
 
-void fp_Unity(mp b) {
+void fp_Unity(fp b) {
     fp_Constant(1, b);
 }
 
-void fp_Zero(mp b) {
+void fp_Zero(fp b) {
     fp_Constant(0, b);
 }
 
@@ -163,7 +163,7 @@ fp2_Init( fp2* fp2 )
 }
 
 void
-fp2_Init_set( fp2* fp2, unsigned long x0, unsigned long x1 )
+fp2_Init_set( fp2* fp2, uint32_t x0, uint32_t x1 )
 {
   fp2_Init(fp2);
   fp_Constant(x0, fp2->x0);
@@ -177,7 +177,7 @@ fp2_IsEqual( const fp2* a1, const fp2* a2 )
 }
 
 void
-fp2_Set( fp2* fp2, unsigned long x0, unsigned long x1 )
+fp2_Set( fp2* fp2, uint32_t x0, uint32_t x1 )
 {
   fp_Constant(x0, fp2->x0);
   fp_Constant(x1, fp2->x1);
@@ -194,10 +194,10 @@ fp2_Sub( const fp2* a, const fp2* b, fp2* c )
 void
 fp2_Multiply( const fp2*  a, const fp2*  b, fp2*  c )
 {
-  mp mul0;
-  mp mul1;
-  mp adda;
-  mp addb;
+  fp mul0;
+  fp mul1;
+  fp adda;
+  fp addb;
 
   fp_Init(&mul0);
   fp_Init(&mul1);
@@ -232,8 +232,8 @@ fp2_Square( const fp2* a, fp2* b )
 void
 fp2_Invert( const fp2* a, fp2* b )
 {
-  mp mul0;
-  mp mul1;
+  fp mul0;
+  fp mul1;
   fp_Init(&mul0);
   fp_Init(&mul1);
 
@@ -260,14 +260,14 @@ fp2_Negative( const fp2* a, fp2* b )
 }
 
 int
-fp2_IsConst( const fp2* a, unsigned long x0, unsigned long x1 ) {
+fp2_IsConst( const fp2* a, uint32_t x0, uint32_t x1 ) {
   return fp_IsConstant(a->x0, x0) && fp_IsConstant(a->x1, x1);
 }
 
 
 void fp2_Sqrt(const fp2* a, fp2* b)
 {
-    mp t0, t1;
+    fp t0, t1;
     fp_Init(&t0);
     fp_Init(&t1);
     if (( fp_IsConstant(a->x1, 0) ) && (fp_QuadNonRes(a->x0))) {
@@ -277,7 +277,7 @@ void fp2_Sqrt(const fp2* a, fp2* b)
             fp_Copy(b->x1, t1);
     }
     else {
-        mp t2, t3, p14, p34, inv2;
+        fp t2, t3, p14, p34, inv2;
         fp_Init(&t2);
         fp_Init(&t3);
         fp_Init(&p14);
@@ -392,7 +392,7 @@ int mont_is_inf_affine(const mont_curve_int_t* curve, const mont_pt_t *P) {
   return (fp2_IsConst( &P->x, 0, 0 )) && (fp2_IsConst( &P->y, 1, 0 ));
 }
 
-void mont_double_and_add(const mont_curve_int_t* curve, const mp k, const mont_pt_t* P, mont_pt_t *Q, int msb) {
+void mont_double_and_add(const mont_curve_int_t* curve, const fp k, const mont_pt_t* P, mont_pt_t *Q, int msb) {
 
   int i;
   
@@ -684,7 +684,7 @@ void get_yP_yQ_A_B(const sike_public_key_t *pk, mont_pt_t *P, mont_pt_t *Q, mont
 
 // PARAMS
 
-const sidh_params_raw_t sidhRawParams = {
+const sike_params_raw_t sikeRawParams = {
     .param_cA1 = CURVEA1,
     .param_cA2 = CURVEA2,
     .param_cB1 = CURVEB1,
@@ -707,7 +707,7 @@ const sidh_params_raw_t sidhRawParams = {
     .param_yq32 = YQ32,
 };
 
-void sidh_setup_params(const sidh_params_raw_t *raw, sidh_params_t *params) {
+void sike_setup_params(const sike_params_raw_t *raw, sike_params_t *params) {
     mont_curve_int_t* startingCurve = &params->startingCurve;
     mont_pt_t* param_P2 = &params->param_P2;
     mont_pt_t* param_Q2 = &params->param_Q2;
@@ -730,7 +730,7 @@ void sidh_setup_params(const sidh_params_raw_t *raw, sidh_params_t *params) {
     fp2_Set(&param_Q3->y, YQ31, YQ32); 
 };
 
-void sidh_teardown_params(sidh_params_t *params) {
+void sike_teardown_params(sike_params_t *params) {
     mont_curve_int_t* startingCurve = &params->startingCurve;
     mont_pt_t* param_P2 = &params->param_P2;
     mont_pt_t* param_Q2 = &params->param_Q2;
@@ -1006,7 +1006,7 @@ void curve_4_iso(const mont_pt_t *P4, const mont_curve_int_t *E, mont_curve_int_
   fp2_Multiply(x4, &t1, &t1);  // t1 = x4^3
   fp2_Add(&t1, x4, &t1);       // t1 = x4^3+x4
   fp2_Multiply(&t1, b, &t1);   // t1 = (x4^3+x4)*b
-  fp2_Invert(&t2, &t2);        // t2 = 1/2 -> precompute
+  fp2_Invert(&t2, &t2);        // t2 = 1/2 -> precofpute
   fp2_Negative(&t2, &t2);      // t2 = -(1/2)
   fp2_Multiply(&t2, &t1, bb);
 
@@ -1090,9 +1090,11 @@ void iso_3_e(int e, const mont_curve_int_t *E, mont_pt_t *S, const mont_pt_t *P1
   mont_pt_clear(&T);
 }
 
-
-
 // Pretty printing
+static void printFP2 (const fp2 z) {
+    printf("[0x%08x, 0x%08x]\n", *z.x0, *z.x1);
+}
+
 static void printPoint (const mont_pt_t P) {
     printf("{x = [0x%08x, 0x%08x], y = [0x%08x, 0x%08x]}\n", *P.x.x0, *P.x.x1, *P.y.x0, *P.y.x1);
 }
@@ -1101,39 +1103,179 @@ static void printCurve (const mont_curve_int_t C) {
     printf("{a = [0x%08x, 0x%08x], b = [0x%08x, 0x%08x]}\n", *C.a.x0, *C.a.x1, *C.b.x0, *C.b.x1);
 }
 
+static void printPublicKey (const sike_public_key_t K) {
+    printf("%08x %08x, %08x %08x, %08x %08x\n", *K.xP.x0, *K.xP.x1, *K.xQ.x0, *K.xQ.x1, *K.xR.x0, *K.xR.x1);
+}
+
+void sike_isogen_2(const sike_params_t *params, sike_public_key_t *pk, const sike_private_key sk) {
+    mont_curve_int_t pkInt = { 0 };
+    mont_curve_init(&pkInt);
+    mont_pt_t iP3 = { 0 };
+    mont_pt_init(&iP3);
+    mont_pt_t iQ3 = { 0 } ;
+    mont_pt_init(&iQ3);
+    
+    unsigned long e, msb = 0;
+    
+    e = 15;
+    msb = 16;
+
+    mont_pt_t S = { 0 };
+    mont_pt_init(&S);
+
+    // Generate kernel
+    // S:=P2+SK_2*Q2;
+    mont_double_and_add(&params->startingCurve, sk, &params->param_Q2, &S, (int) msb);
+    xADD(&params->startingCurve, &params->param_P2, &S, &S);
+
+    iso_2_e( (int) e, &params->startingCurve, &S, &params->param_P3, &params->param_Q3, &pkInt, &iP3, &iQ3);
+    get_xR(&pkInt, &iP3, &iQ3, pk);
+
+    mont_pt_clear(&S);
+    mont_curve_clear(&pkInt);
+    mont_pt_clear(&iP3);
+    mont_pt_clear(&iQ3);
+
+}
+
+void sike_isogen_3(const sike_params_t *params, sike_public_key_t *pk, const sike_private_key sk) {
+    mont_curve_int_t pkInt = { 0 };
+    mont_curve_init(&pkInt);
+    mont_pt_t iP2 = { 0 };
+    mont_pt_init(&iP2);
+    mont_pt_t iQ2 = { 0 } ;
+    mont_pt_init(&iQ2);
+    
+    unsigned long e, msb = 0;
+    
+    e = 8;
+    msb = 12;
+
+    mont_pt_t S = { 0 };
+    mont_pt_init(&S);
+
+    // Generate kernel
+    // S:=P2+SK_2*Q2;
+    mont_double_and_add(&params->startingCurve, sk, &params->param_Q3, &S, (int) msb);
+    xADD(&params->startingCurve, &params->param_P3, &S, &S);
+
+    iso_3_e( (int) e, &params->startingCurve, &S, &params->param_P2, &params->param_Q2, &pkInt, &iP2, &iQ2);
+    get_xR(&pkInt, &iP2, &iQ2, pk);
+
+    mont_pt_clear(&S);
+    mont_curve_clear(&pkInt);
+    mont_pt_clear(&iP2);
+    mont_pt_clear(&iQ2);
+
+}
+
+void sike_isoex_2(const sike_params_t *params, const sike_public_key_t *pkO, const sike_private_key skI, fp2 *secret) {
+    mont_curve_int_t E = { 0 };
+    mont_curve_init(&E);
+    mont_pt_t iP3 = { 0 };
+    mont_pt_init(&iP3);
+    mont_pt_t iQ3 = { 0 } ;
+    mont_pt_init(&iQ3);
+    
+    unsigned long e, msb = 0;
+    
+    e = 15;
+    msb = 16;
+
+    mont_pt_t S = { 0 };
+    mont_pt_init(&S);
+    get_yP_yQ_A_B(pkO, &iP3, &iQ3, &E);
+
+    mont_double_and_add(&E, skI, &iQ3, &S, (int) msb);
+    xADD(&E, &iP3, &S, &S);
+
+    iso_2_e( (int) e, &E, &S, NULL, NULL, &E, NULL, NULL);
+    j_inv(&E, secret);
+
+    mont_pt_clear(&S);
+    mont_curve_clear(&E);
+    mont_pt_clear(&iP3);
+    mont_pt_clear(&iQ3);
+
+}
+
+void sike_isoex_3(const sike_params_t *params, const sike_public_key_t *pkO, const sike_private_key skI, fp2 *secret) {
+    mont_curve_int_t E = { 0 };
+    mont_curve_init(&E);
+    mont_pt_t iP2 = { 0 };
+    mont_pt_init(&iP2);
+    mont_pt_t iQ2 = { 0 } ;
+    mont_pt_init(&iQ2);
+    
+    unsigned long e, msb = 0;
+    
+    e = 8;
+    msb = 12;
+
+    mont_pt_t S = { 0 };
+    mont_pt_init(&S);
+    get_yP_yQ_A_B(pkO, &iP2, &iQ2, &E);
+
+    mont_double_and_add(&E, skI, &iQ2, &S, (int) msb);
+    xADD(&E, &iP2, &S, &S);
+
+    iso_3_e( (int) e, &E, &S, NULL, NULL, &E, NULL, NULL);
+    j_inv(&E, secret);
+
+    mont_pt_clear(&S);
+    mont_curve_clear(&E);
+    mont_pt_clear(&iP2);
+    mont_pt_clear(&iQ2);
+
+}
+
 
 int main () {
-    sidh_params_t * params;
-    sidh_setup_params(&sidhRawParams, params);
+    sike_params_t params;
+    sike_setup_params(&sikeRawParams, &params);
+
+    sike_private_key skA;
+    fp_Init(&skA);
+    //Range here is 0 to 32767.
+    fp_Constant(3, skA);
     
-    mont_pt_t R;
-    mont_pt_init(&R);
-    mont_pt_t iP1;
-    mont_pt_init(&iP1);
-    mont_pt_t iP2;
-    mont_pt_init(&iP2);
-    mont_curve_int_t C;
-    mont_curve_init(&C);
-    mp i;
-    fp_Init(&i);
-    fp_Constant(4, i);
-    mont_double_and_add(&params->startingCurve, i, &params->param_Q2, &R, 31);
-    xADD(&params->startingCurve, &R, &params->param_P2, &R);
-    iso_2_e(15, &params->startingCurve, &R, &params->param_P3, &params->param_Q3, &C, &iP1, &iP2);
-    printCurve(C);
-    printPoint(iP1);
-    printPoint(iP2);
-    sidh_teardown_params(params);
+    sike_private_key skB;
+    fp_Init(&skB);
+    //Range here is 0 to 6560, although in practice it's 0 to 4095.
+    fp_Constant(4096, skB);
+    
+    sike_public_key_t pkA;
+    public_key_init(&pkA);
+
+    sike_public_key_t pkB;
+    public_key_init(&pkB);
+    
+    fp2 secretA;
+    fp2_Init(&secretA);
+    
+    fp2 secretB;
+    fp2_Init(&secretB);
+    
+    sike_isogen_3(&params, &pkB, skB);
+    sike_isoex_2(&params, &pkB, skA, &secretA);
+    
+    sike_isogen_2(&params, &pkA, skA);
+    sike_isoex_3(&params, &pkA, skB, &secretB);
+    
+    printFP2(secretA);
+    printFP2(secretB);
+
+    sike_teardown_params(&params);
+    
+    fp_Clear(&skA);
+    fp_Clear(&skB);
+    
+    public_key_clear(&pkA);
+    public_key_clear(&pkB);
+    
+    fp2_Clear(&secretA);
+    fp2_Clear(&secretB);
 
     return 0;
 }
-/*
-sidh32> let S = xADD startingCurve param_P3 (double_and_add startingCurve param_Q3 4)
-[warning] at <interactive>:1:38--1:52:
-  Defaulting type argument 'n' of 'double_and_add' to 3
-sidh32> iso_3_e S (startingCurve, [param_P2, param_Q2])
-({A = [0x02240ecd, 0x014eab54], B = [0x099b0a56, 0x0aec096b]},
- [{x = [0x03623611, 0x00d0dae5], y = [0x05b0ece0, 0x05492c58]},
-  {x = [0x031f6418, 0x003736ba], y = [0x0cb1647c, 0x07da285b]}])
-  */
 

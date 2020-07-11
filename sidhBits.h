@@ -24,51 +24,51 @@
 
 // FP
 
-typedef uint32_t * mp;
+typedef uint32_t * fp;
 
-void fp_Add(const mp a, const mp b, mp c);
+void fp_Add(const fp a, const fp b, fp c);
 
-void fp_Clear(mp* q);
+void fp_Clear(fp* q);
 
-void fp_Constant(unsigned long a, mp b);
+void fp_Constant(uint32_t a, fp b);
 
-void fp_Copy(mp dst, const mp src);
+void fp_Copy(fp dst, const fp src);
 
-void fp_Init(mp* q);
+void fp_Init(fp* q);
 
-int fp_IsEqual(const mp a, const mp b);
+int fp_IsEqual(const fp a, const fp b);
 
-int fp_IsEven(const mp a);
+int fp_IsEven(const fp a);
 
-void fp_Invert(const mp a, mp b);
+void fp_Invert(const fp a, fp b);
 
-int fp_IsBitSet(const mp a, const unsigned long i);
+int fp_IsBitSet(const fp a, const int i);
 
-int fp_IsConstant(const mp a, const size_t constant);
+int fp_IsConstant(const fp a, const size_t constant);
 
-void fp_Multiply(const mp a, const mp b, mp c);
+void fp_Multiply(const fp a, const fp b, fp c);
 
-void fp_Negative(const mp a, mp b);
+void fp_Negative(const fp a, fp b);
 
-void fp_Pow(const mp a, const mp b, mp c);
+void fp_Pow(const fp a, const fp b, fp c);
 
-int fp_QuadNonRes(const mp a);
+int fp_QuadNonRes(const fp a);
 
-void fp_Square(const mp a, mp b);
+void fp_Square(const fp a, fp b);
 
-void fp_Sqrt(const mp a, mp b);
+void fp_Sqrt(const fp a, fp b);
 
-void fp_Subtract(const mp a, const mp b, mp c);
+void fp_Subtract(const fp a, const fp b, fp c);
 
-void fp_Unity(mp b);
+void fp_Unity(fp b);
 
-void fp_Zero(mp a);
+void fp_Zero(fp a);
 
 // FP2
 
 typedef struct {
-  mp x0;
-  mp x1;
+  fp x0;
+  fp x1;
 } fp2;
 
 void fp2_Add(const fp2* a, const fp2* b, fp2* c );
@@ -79,11 +79,11 @@ void fp2_Copy(const fp2* a, fp2* b );
 
 void fp2_Init(fp2* fp2 );
 
-void fp2_Init_set(fp2* fp2, unsigned long x0, unsigned long x1 );
+void fp2_Init_set(fp2* fp2, uint32_t x0, uint32_t x1 );
 
 int fp2_IsEqual(const fp2* a1, const fp2* a2 );
 
-void fp2_Set(fp2* fp2, unsigned long x0, unsigned long x1 );
+void fp2_Set(fp2* fp2, uint32_t x0, uint32_t x1 );
 
 void fp2_Sub(const fp2* a, const fp2* b, fp2* c );
 
@@ -95,7 +95,7 @@ void fp2_Invert(const fp2* a, fp2* b );
 
 void fp2_Negative(const fp2* a, fp2* b );
 
-int fp2_IsConst(const fp2* a, unsigned long x0, unsigned long x1 );
+int fp2_IsConst(const fp2* a, uint32_t x0, uint32_t x1 );
 
 void fp2_Sqrt(const fp2* a, fp2* b);
 
@@ -134,7 +134,7 @@ void public_key_clear(sike_public_key_t* pk);
 
 void mont_pt_copy(const mont_pt_t* src, mont_pt_t* dst);
 
-void mont_double_and_add(const mont_curve_int_t *curve, const mp k, const mont_pt_t *P, mont_pt_t *Q, int msb);
+void mont_double_and_add(const mont_curve_int_t *curve, const fp k, const mont_pt_t *P, mont_pt_t *Q, int msb);
 
 void xDBL(const mont_curve_int_t *curve, const mont_pt_t *P, mont_pt_t *R);
 
@@ -162,7 +162,7 @@ typedef struct {
     mont_pt_t param_P3;
     mont_pt_t param_Q3;
 
-} sidh_params_t;
+} sike_params_t;
 
 typedef struct {
     uint32_t param_cA1;
@@ -185,12 +185,12 @@ typedef struct {
     uint32_t param_xq32;
     uint32_t param_yq31;
     uint32_t param_yq32;
-} sidh_params_raw_t;
+} sike_params_raw_t;
 
-void sidh_setup_params(const sidh_params_raw_t *raw, sidh_params_t *params);
-void sidh_teardown_params(sidh_params_t *params);
+void sike_setup_params(const sike_params_raw_t *raw, sike_params_t *params);
+void sike_teardown_params(sike_params_t *params);
 
-extern const sidh_params_raw_t sidhRawParams;
+extern const sike_params_raw_t sikeRawParams;
 
 // ISOGENIES
 
@@ -217,9 +217,12 @@ void iso_3_e(int e, const mont_curve_int_t *E, mont_pt_t *S, const mont_pt_t *P1
 
 // SIDH 
 
-void sidh_sk_keygen(const sike_params_t* params, party_t party, sike_private_key sk);
+typedef uint32_t * sike_private_key;
 
+void sike_isogen_2(const sike_params_t *params, sike_public_key_t *pk, const sike_private_key sk);
 
-void sidh_isogen(const sike_params_t *params, sike_public_key_t *pk, const sike_private_key sk, party_t party);
+void sike_isogen_3(const sike_params_t *params, sike_public_key_t *pk, const sike_private_key sk);
 
-void sidh_isoex(const sike_params_t *params, const sike_public_key_t *pkO, const sike_private_key skI, party_t party, fp2 *secret);
+void sike_isoex_2(const sike_params_t *params, const sike_public_key_t *pkO, const sike_private_key skI, fp2 *secret);
+
+void sike_isoex_3(const sike_params_t *params, const sike_public_key_t *pkO, const sike_private_key skI, fp2 *secret);
