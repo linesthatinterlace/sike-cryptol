@@ -3,6 +3,105 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// PARAMS
+
+const sike_params_raw_t sikeRawParams = {
+  .cA1 = CURVEA1,
+  .cA2 = CURVEA2,
+  .cB1 = CURVEB1,
+  .cB2 = CURVEB2,
+  .xp21 = XP21,
+  .xp22 = XP22,
+  .yp21 = YP21,
+  .yp22 = YP22,
+  .xq21 = XQ21,
+  .xq22 = XQ22,
+  .yq21 = YQ21,
+  .yq22 = YQ22,
+  .xp31 = XP31,
+  .xp32 = XP32,
+  .yp31 = YP31,
+  .yp32 = YP32,
+  .xq31 = XQ31,
+  .xq32 = XQ32,
+  .yq31 = YQ31,
+  .yq32 = YQ32,
+};
+
+void sike_setup_params(const sike_params_raw_t *raw, sike_params_t *params) {
+  mont_curve_int_t *EA = &params->EA;
+  mont_curve_int_t *EB = &params->EB;
+  mont_pt_t *P2 = &EA->P;
+  mont_pt_t *Q2 = &EA->Q;
+  mont_pt_t *P3 = &EB->P;
+  mont_pt_t *Q3 = &EB->Q;
+  fp2_Set(&EA->a, raw->cA1, raw->cA2);
+  fp2_Set(&EA->b, raw->cB1, raw->cB2);
+  fp2_Set(&EB->a, raw->cA1, raw->cA2);
+  fp2_Set(&EB->b, raw->cB1, raw->cB2);
+  fp2_Set(&EA->P.x, raw->xp21, raw->xp22);
+  fp2_Set(&EA->P.y, raw->yp21, raw->yp22);
+  fp2_Set(&EA->Q.x, raw->xq21, raw->xq22);
+  fp2_Set(&EA->Q.y, raw->yq21, raw->yq22);
+  fp2_Set(&EB->P.x, raw->xp31, raw->xp32);
+  fp2_Set(&EB->P.y, raw->yp31, raw->yp32);
+  fp2_Set(&EB->Q.x, raw->xq31, raw->xq32);
+  fp2_Set(&EB->Q.y, raw->yq31, raw->yq32);
+};
+
+
+// Encodings
+void itoos (const uint32_t * to_enc, uint8_t* enc) {
+  for (int i = 0; i < sizeof(*to_enc); i++) {
+    enc[i] = (uint8_t)(*to_enc >> (8 * i));
+  }
+}
+
+void ostoi (const uint8_t* to_dec, uint32_t *dec, size_t len) {
+  uint32_t acc = 0;
+  for (int i = 0; i < len; i++) {
+    acc += to_dec[i] << (8 * i);
+  }
+  *dec = acc;
+}
+
+void fptoos (const fp * to_enc, uint8_t * enc) {
+  fp a = *to_enc % MODULUS;
+  itoos(&a, enc);
+}
+
+int ostofp (const uint8_t *to_dec, fp * dec) {
+  ostoi(to_dec, dec, NP);
+  return (*dec < MODULUS);
+}
+
+void fp2toos(const fp2* to_enc, uint8_t * enc) {
+  fptoos(&to_enc->x0, enc );
+  fptoos(&to_enc->x1, enc + NP);  
+}
+
+
+int ostofp2(const uint8_t *to_dec, fp2* dec) {
+  int rc = 0;
+  rc  = ostofp(to_dec, &dec->x0);
+  rc |= ostofp(to_dec + NP, &dec->x1);
+  return rc;
+}
+
+void pktoos(const sike_public_key_t* to_enc, uint8_t * enc) {
+  fp2toos(&to_enc->xP, enc );
+  fp2toos(&to_enc->xQ, enc + 2*NP);
+  fp2toos(&to_enc->xR, enc + 4*NP);
+}
+
+int ostopk(const uint8_t *to_dec, sike_public_key_t* dec) {
+  int rc = 0;
+  rc  = ostofp2(to_dec, &dec->xP);
+  rc |= ostofp2(to_dec + 2*NP, &dec->xQ);
+  rc |= ostofp2(to_dec + 4*NP, &dec->xR);
+  return rc;
+}
+
 // FP
 
 void fp_Add(const fp *a, const fp *b, fp *c) {
@@ -96,6 +195,10 @@ void fp_Zero(fp *b) { fp_Constant(0, b); }
 void fp2_Add(const fp2 *a, const fp2 *b, fp2 *c) {
   fp_Add(&a->x0, &b->x0, &c->x0);
   fp_Add(&a->x1, &b->x1, &c->x1);
+}
+
+void fp2_Doub(const fp2 *a, fp2 *b) {
+  fp2_Add(a, a, b);
 }
 
 void fp2_Copy(const fp2 *a, fp2 *b) {
@@ -213,6 +316,8 @@ void fp2_Sqrt(const fp2 *a, fp2 *b) {
   }
 }
 
+void fp2_Unity(fp2 *b) { fp2_Set(b, 1, 0); }
+
 // MONTGOMERY
 
 void mont_curve_copy(const mont_curve_int_t *curve,
@@ -233,13 +338,13 @@ void mont_pt_copy(const mont_pt_t *src, mont_pt_t *dst) {
 }
 
 /* infinity is represented as a point with (0, 0) */
-void mont_set_inf_affine(const mont_curve_int_t *curve, mont_pt_t *P) {
+void mont_set_inf_affine(mont_pt_t *P) {
   fp2_Set(&P->x, 0, 0);
-  fp2_Set(&P->y, 1, 0);
+  fp2_Unity(&P->y);
 }
 
 /* returns 1 for True, 0 for False */
-int mont_is_inf_affine(const mont_curve_int_t *curve, const mont_pt_t *P) {
+int mont_is_inf_affine(const mont_pt_t *P) {
   return (fp2_IsConst(&P->x, 0, 0)) && (fp2_IsConst(&P->y, 1, 0));
 }
 
@@ -250,7 +355,7 @@ void mont_double_and_add(const mont_curve_int_t *curve, const fp *k,
 
   mont_pt_t kP = {0};
 
-  mont_set_inf_affine(curve, &kP);
+  mont_set_inf_affine(&kP);
 
   for (i = msb - 1; i >= 0; i--) {
     xDBL(curve, &kP, &kP);
@@ -275,27 +380,27 @@ void xDBL(const mont_curve_int_t *curve, const mont_pt_t *P, mont_pt_t *R) {
 
   fp2_Negative(&P->y, &t0);
 
-  if (mont_is_inf_affine(curve, P)) {
-    mont_set_inf_affine(curve, R);
+  if (mont_is_inf_affine(P)) {
+    mont_set_inf_affine(R);
   } else if (fp2_IsEqual(&P->y, &t0)) {
     /* P == -P */
-    mont_set_inf_affine(curve, R);
+    mont_set_inf_affine(R);
   } else {
 
-    fp2_Set(&t2, 1, 0); // t2 = 1
+    fp2_Unity(&t2); // t2 = 1
 
     fp2_Square(&P->x, &t0); // t0 = x1^2
-    fp2_Add(&t0, &t0, &t1); // t1 = 2*x1^2
+    fp2_Doub(&t0, &t1); // t1 = 2*x1^2
     fp2_Add(&t0, &t1, &t0); // t0 = 3*x1^2
 
     fp2_Multiply(a, &P->x, &t1); // t1 = a*x1
-    fp2_Add(&t1, &t1, &t1);      // t1 = 2*a*x1
+    fp2_Doub(&t1, &t1);      // t1 = 2*a*x1
 
     fp2_Add(&t0, &t1, &t0); // t0 = 3*x1^2+2*a*x1
     fp2_Add(&t0, &t2, &t0); // t0 = 3*x1^2+2*a*x1+1
 
     fp2_Multiply(b, &P->y, &t1); // t1 = b*y1
-    fp2_Add(&t1, &t1, &t1);      // t1 = 2*b*y1
+    fp2_Doub(&t1, &t1);      // t1 = 2*b*y1
     fp2_Invert(&t1, &t1);        // t1 = 1 / (2*b*y1)
 
     fp2_Multiply(&t0, &t1, &t0); // t0 = (3*x1^2+2*a*x1+1) / (2*b*y1)
@@ -304,16 +409,18 @@ void xDBL(const mont_curve_int_t *curve, const mont_pt_t *P, mont_pt_t *R) {
 
     fp2_Multiply(b, &t1, &t2); // t2 = b*(3*x1^2+2*a*x1+1)^2 / (2*b*y1)^2
     fp2_Sub(&t2, a, &t2);      // t2 = b*(3*x1^2+2*a*x1+1)^2 / (2*b*y1)^2 - a
-    fp2_Sub(&t2, &P->x,
-            &t2); // t2 = b*(3*x1^2+2*a*x1+1)^2 / (2*b*y1)^2 - a - x1
-    fp2_Sub(&t2, &P->x,
-            &t2); // t2 = b*(3*x1^2+2*a*x1+1)^2 / (2*b*y1)^2 - a - x1 - x1
+    fp2_Sub(&t2, &P->x, &t2);
+    
+    // t2 = b*(3*x1^2+2*a*x1+1)^2 / (2*b*y1)^2 - a - x1
+    fp2_Sub(&t2, &P->x, &t2);
+    
+    // t2 = b*(3*x1^2+2*a*x1+1)^2 / (2*b*y1)^2 - a - x1 - x1
 
     fp2_Multiply(&t0, &t1, &t1); // t1 = (3*x1^2+2*a*x1+1)^3 / (2*b*y1)^3
     fp2_Multiply(b, &t1, &t1);   // t1 = b*(3*x1^2+2*a*x1+1)^3 / (2*b*y1)^3
     fp2_Add(&t1, &P->y, &t1);    // t1 = b*(3*x1^2+2*a*x1+1)^3 / (2*b*y1)^3 + y1
 
-    fp2_Add(&P->x, &P->x, &R->y); // x3 = 2*x1
+    fp2_Doub(&P->x, &R->y); // x3 = 2*x1
     fp2_Add(&R->y, &P->x, &R->y); // y3 = 2*x1+x1
     fp2_Add(&R->y, a, &R->y);     // y3 = 2*x1+x1+a
     fp2_Multiply(&R->y, &t0,
@@ -343,23 +450,23 @@ void xADD(const mont_curve_int_t *curve, const mont_pt_t *P, const mont_pt_t *Q,
   const fp2 *a = &curve->a;
   const fp2 *b = &curve->b;
 
-  fp2 t0 = {0}, t1 = {0}, t2 = {0};
+  fp2 t0 = {0};
 
   fp2_Negative(&Q->y, &t0);
 
-  if (mont_is_inf_affine(curve, P)) {
+  if (mont_is_inf_affine(P)) {
     mont_pt_copy(Q, R);
-  } else if (mont_is_inf_affine(curve, Q)) {
+  } else if (mont_is_inf_affine(Q)) {
     mont_pt_copy(P, R);
   } else if (fp2_IsEqual(&P->x, &Q->x) && fp2_IsEqual(&P->y, &Q->y)) {
     /* P == Q */
     xDBL(curve, P, R);
   } else if (fp2_IsEqual(&P->x, &Q->x) && fp2_IsEqual(&P->y, &t0)) {
     /* P == -Q */
-    mont_set_inf_affine(curve, R);
+    mont_set_inf_affine(R);
   } else {
     /* P != Q or -Q  */
-
+    fp2 t1 = {0}, t2 = {0};
     fp2_Sub(&Q->y, &P->y, &t0);  // t0 = y2-y1
     fp2_Sub(&Q->x, &P->x, &t1);  // t1 = x2-x1
     fp2_Invert(&t1, &t1);        // t1 = 1/(x2-x1)
@@ -367,7 +474,7 @@ void xADD(const mont_curve_int_t *curve, const mont_pt_t *P, const mont_pt_t *Q,
 
     fp2_Square(&t0, &t1); // t1 = (y2-y1)^2/(x2-x1)^2
 
-    fp2_Add(&P->x, &P->x, &t2);  // t2 = 2*x1
+    fp2_Doub(&P->x, &t2);  // t2 = 2*x1
     fp2_Add(&t2, &Q->x, &t2);    // t2 = 2*x1+x2
     fp2_Add(&t2, a, &t2);        // t2 = 2*x1+x2+a
     fp2_Multiply(&t2, &t0, &t2); // t2 = (2*x1+x2+a)*(y2-y1)/(x2-x1)
@@ -405,6 +512,11 @@ void xTPLe(const mont_curve_int_t *curve, const mont_pt_t *P, int e,
     xTPL(curve, R, R);
 }
 
+void xNEGATE(const mont_pt_t *P, mont_pt_t *R) {
+  mont_pt_copy(P, R);
+  fp2_Negative(&R->y, &R->y);
+}
+
 void j_inv(const mont_curve_int_t *E, fp2 *jinv) {
   const fp2 *a = &E->a;
 
@@ -415,139 +527,20 @@ void j_inv(const mont_curve_int_t *E, fp2 *jinv) {
   fp2_Sub(&t0, jinv, jinv);      // jinv = a^2-3
   fp2_Square(jinv, &t1);         // t1 = (a^2-3)^2
   fp2_Multiply(jinv, &t1, jinv); // jinv = (a^2-3)^3
-  fp2_Add(jinv, jinv, jinv);     // jinv = 2*(a^2-3)^3
-  fp2_Add(jinv, jinv, jinv);     // jinv = 4*(a^2-3)^3
-  fp2_Add(jinv, jinv, jinv);     // jinv = 8*(a^2-3)^3
-  fp2_Add(jinv, jinv, jinv);     // jinv = 16*(a^2-3)^3
-  fp2_Add(jinv, jinv, jinv);     // jinv = 32*(a^2-3)^3
-  fp2_Add(jinv, jinv, jinv);     // jinv = 64*(a^2-3)^3
-  fp2_Add(jinv, jinv, jinv);     // jinv = 128*(a^2-3)^3
-  fp2_Add(jinv, jinv, jinv);     // jinv = 256*(a^2-3)^3
+  fp2_Doub(jinv, jinv);     // jinv = 2*(a^2-3)^3
+  fp2_Doub(jinv, jinv);     // jinv = 4*(a^2-3)^3
+  fp2_Doub(jinv, jinv);     // jinv = 8*(a^2-3)^3
+  fp2_Doub(jinv, jinv);     // jinv = 16*(a^2-3)^3
+  fp2_Doub(jinv, jinv);     // jinv = 32*(a^2-3)^3
+  fp2_Doub(jinv, jinv);     // jinv = 64*(a^2-3)^3
+  fp2_Doub(jinv, jinv);     // jinv = 128*(a^2-3)^3
+  fp2_Doub(jinv, jinv);     // jinv = 256*(a^2-3)^3
 
   fp2_Set(&t1, 4, 0);            // t1 = 4
   fp2_Sub(&t0, &t1, &t0);        // t0 = a^2-4
   fp2_Invert(&t0, &t0);          // t0 = 1/(a^2-4)
   fp2_Multiply(jinv, &t0, jinv); // jinv = 256*(a^2-3)^3/(a^2-4)
 }
-
-void get_xR(const mont_curve_int_t *curve, const mont_pt_t *P,
-            const mont_pt_t *Q, sike_public_key_t *pk) {
-
-  mont_pt_t R = {0};
-
-  mont_pt_copy(Q, &R);
-  fp2_Negative(&R.y, &R.y);
-
-  xADD(curve, P, &R, &R);
-  fp2_Copy(&P->x, &pk->xP);
-  fp2_Copy(&Q->x, &pk->xQ);
-  fp2_Copy(&R.x, &pk->xR);
-}
-
-void get_yP_yQ_A_B(const sike_public_key_t *pk, mont_pt_t *P, mont_pt_t *Q,
-                   mont_curve_int_t *curve) {
-
-  fp2 *a = &curve->a;
-  fp2 *b = &curve->b;
-
-  const fp2 *xP = &pk->xP;
-  const fp2 *xQ = &pk->xQ;
-  const fp2 *xR = &pk->xR;
-
-  mont_pt_t T = {0};
-
-  fp2 *t1 = &T.x, *t2 = &T.y;
-
-  // a:=(1-xP*xQ-xP*xR-xQ*xR)^2/(4*xP*xQ*xR)-xP-xQ-xR;
-
-  fp2_Multiply(xP, xQ, a); // t1 = xP*xQ
-  fp2_Multiply(a, xR, t1); // t2 = xP*xQ*xR
-  fp2_Add(t1, t1, t1);     // t2 = 2*xP*xQ*xR
-  fp2_Add(t1, t1, t1);     // t2 = 4*xP*xQ*xR
-  fp2_Invert(t1, t1);      // t2 = 1/(4*xP*xQ*xR)
-
-  fp2_Set(t2, 1, 0);        // t3 = 1
-  fp2_Sub(t2, a, a);        // t1 = 1-xP*xQ
-  fp2_Multiply(xP, xR, t2); // t3 = xP*xR
-  fp2_Sub(a, t2, a);        // t1 = 1-xP*xQ-xP*xR
-  fp2_Multiply(xQ, xR, t2); // t3 = xQ*xR
-  fp2_Sub(a, t2, a);        // t1 = 1-xP*xQ-xP*xR-xQ*xR
-  fp2_Square(a, a);         // t1 = (1-xP*xQ-xP*xR-xQ*xR)^2
-
-  fp2_Multiply(a, t1, a); // t1 = (1-xP*xQ-xP*xR-xQ*xR)^2/(4*xP*xQ*xR)
-  fp2_Sub(a, xP, a);      // t1 = (1-xP*xQ-xP*xR-xQ*xR)^2/(4*xP*xQ*xR)-xP
-  fp2_Sub(a, xQ, a);      // t1 = (1-xP*xQ-xP*xR-xQ*xR)^2/(4*xP*xQ*xR)-xP-xQ
-  fp2_Sub(a, xR, a);      // a = (1-xP*xQ-xP*xR-xQ*xR)^2/(4*xP*xQ*xR)-xP-xQ-xR
-
-  fp2_Square(xP, t1);       // t1 = xP^2
-  fp2_Multiply(xP, t1, t2); // t2 = xP^3
-  fp2_Multiply(a, t1, t1);  // t1 = a*xP^2
-  fp2_Add(t2, t1, t1);      // t1 = xP^3+a*xP^2
-  fp2_Add(t1, xP, t1);      // t1 = xP^3+a*xP^2+xP
-  fp2_Sqrt(t1, &P->y);      // yP = sqrt(xP^3+a*xP^2+xP)
-
-  fp2_Square(xQ, t1);       // t1 = xQ^2
-  fp2_Multiply(xQ, t1, t2); // t2 = xQ^3
-  fp2_Multiply(a, t1, t1);  // t1 = a*xQ^2
-  fp2_Add(t2, t1, t1);      // t1 = xQ^3+a*xQ^2
-  fp2_Add(t1, xQ, t1);      // t1 = xQ^3+a*xQ^2+xQ
-  fp2_Sqrt(t1, &Q->y);      // yQ = sqrt(xQ^3+a*xQ^2+xQ)
-
-  fp2_Copy(xP, &P->x);
-  fp2_Copy(xQ, &Q->x);
-
-  fp2_Set(b, 1, 0);
-
-  mont_pt_copy(Q, &T);
-  fp2_Negative(&T.y, &T.y);
-  xADD(curve, P, &T, &T);
-
-  if (!fp2_IsEqual(&T.x, xR))
-    fp2_Negative(&Q->y, &Q->y);
-}
-
-// PARAMS
-
-const sike_params_raw_t sikeRawParams = {
-    .param_cA1 = CURVEA1,
-    .param_cA2 = CURVEA2,
-    .param_cB1 = CURVEB1,
-    .param_cB2 = CURVEB2,
-    .param_xp21 = XP21,
-    .param_xp22 = XP22,
-    .param_yp21 = YP21,
-    .param_yp22 = YP22,
-    .param_xq21 = XQ21,
-    .param_xq22 = XQ22,
-    .param_yq21 = YQ21,
-    .param_yq22 = YQ22,
-    .param_xp31 = XP31,
-    .param_xp32 = XP32,
-    .param_yp31 = YP31,
-    .param_yp32 = YP32,
-    .param_xq31 = XQ31,
-    .param_xq32 = XQ32,
-    .param_yq31 = YQ31,
-    .param_yq32 = YQ32,
-};
-
-void sike_setup_params(const sike_params_raw_t *raw, sike_params_t *params) {
-  mont_curve_int_t *startingCurve = &params->startingCurve;
-  mont_pt_t *param_P2 = &params->param_P2;
-  mont_pt_t *param_Q2 = &params->param_Q2;
-  mont_pt_t *param_P3 = &params->param_P3;
-  mont_pt_t *param_Q3 = &params->param_Q3;
-  fp2_Set(&startingCurve->a, raw->param_cA1, raw->param_cA2);
-  fp2_Set(&startingCurve->b, raw->param_cB1, raw->param_cB2);
-  fp2_Set(&param_P2->x, raw->param_xp21, raw->param_xp22);
-  fp2_Set(&param_P2->y, raw->param_yp21, raw->param_yp22);
-  fp2_Set(&param_Q2->x, raw->param_xq21, raw->param_xq22);
-  fp2_Set(&param_Q2->y, raw->param_yq21, raw->param_yq22);
-  fp2_Set(&param_P3->x, raw->param_xp31, raw->param_xp32);
-  fp2_Set(&param_P3->y, raw->param_yp31, raw->param_yp32);
-  fp2_Set(&param_Q3->x, raw->param_xq31, raw->param_xq32);
-  fp2_Set(&param_Q3->y, raw->param_yq31, raw->param_yq32);
-};
 
 // ISOGENIES
 
@@ -563,12 +556,12 @@ void eval_2_iso(const mont_pt_t *P2, const mont_pt_t *P, mont_pt_t *isoP) {
   // yy:=y*(x^2*x2-2*x*x2^2+x2)/(x-x2)^2;
 
   fp2 t1 = {0}, t2 = {0}, t3 = {0}, one = {0};
-  fp2_Set(&one, 1, 0);
+  fp2_Unity(&one);
 
   fp2_Multiply(x, x2, &t1);   // t1:=x*x2;  // t1 = x*x2
   fp2_Multiply(x, &t1, &t2);  // t2:=x*t1;  // t2 = x^2*x2
   fp2_Multiply(&t1, x2, &t3); // t3:=t1*x2; // t3 = x*x2^2
-  fp2_Add(&t3, &t3, &t3);     // t3:=t3+t3; // t3 = 2*x*x2^2
+  fp2_Doub(&t3, &t3);     // t3:=t3+t3; // t3 = 2*x*x2^2
   fp2_Sub(&t2, &t3, &t3);     // t3:=t2-t3; // t3 = x^2*x2-2*x*x2^2
   fp2_Add(&t3, x2, &t3);      // t3:=t3+x2; // t3 = x^2*x2-2*x*x2^2+x2
   fp2_Multiply(y, &t3, &t3);  // t3:=y*t3;  // t3 = y*(x^2*x2-2*x*x2^2+x2)
@@ -595,12 +588,12 @@ void curve_2_iso(const mont_pt_t *P2, const mont_curve_int_t *E,
   fp2 *bb = &isoE->b;
 
   fp2 t1 = {0}, one = {0};
-  fp2_Set(&one, 1, 0);
+  fp2_Unity(&one);
 
   fp2_Square(x2, &t1);     // t1 = x2^2
-  fp2_Add(&t1, &t1, &t1);  // t1 = 2*x2^2
+  fp2_Doub(&t1, &t1);  // t1 = 2*x2^2
   fp2_Sub(&one, &t1, &t1); // t1 = 1-2*x2^2
-  fp2_Add(&t1, &t1, aa);   // aa = 2*(1-2*x2^2)
+  fp2_Doub(&t1, aa);   // aa = 2*(1-2*x2^2)
   fp2_Multiply(x2, b, bb); // bb = x2*b
 }
 
@@ -615,13 +608,13 @@ void eval_3_iso(const mont_pt_t *P3, const mont_pt_t *P, mont_pt_t *isoP) {
 
   fp2 t1 = {0}, t2 = {0}, t3 = {0}, t4 = {0}, one = {0};
 
-  fp2_Set(&one, 1, 0);
+  fp2_Unity(&one);
 
   fp2_Square(x, &t1);         // t1 = x^2
   fp2_Multiply(&t1, x3, &t1); // t1 = x^2*x3
   fp2_Square(x3, &t2);        // t2 = x3^2
   fp2_Multiply(x, &t2, &t2);  // t2 = x*x3^2
-  fp2_Add(&t2, &t2, &t3);     // t3 = 2*x*x3^2
+  fp2_Doub(&t2, &t3);     // t3 = 2*x*x3^2
   fp2_Add(&t2, &t3, &t2);     // t2 = 3*x*x3^2
   fp2_Sub(&t1, &t2, &t1);     // t1 = x^2*x3-3*x*x3^2
   fp2_Add(&t1, x, &t1);       // t1 = x^2*x3-3*x*x3^2+x
@@ -663,8 +656,8 @@ void curve_3_iso(const mont_pt_t *P3, const mont_curve_int_t *E,
   fp2_Square(x3, &t1);      // t1 = x3^2
   fp2_Multiply(b, &t1, bb); // bb = b*x3^2
 
-  fp2_Add(&t1, &t1, &t1);    // t1 = 2*x3^2
-  fp2_Add(&t1, &t1, &t2);    // t2 = 4*x3^2
+  fp2_Doub(&t1, &t1);    // t1 = 2*x3^2
+  fp2_Doub(&t1, &t2);    // t2 = 4*x3^2
   fp2_Add(&t1, &t2, &t1);    // t1 = 6*x3^2
   fp2_Set(&t2, 6, 0);        // t2 = 6
   fp2_Sub(&t1, &t2, &t1);    // t1 = 6*x3^2-6
@@ -682,7 +675,7 @@ void eval_4_iso(const mont_pt_t *P4, const mont_pt_t *P, mont_pt_t *isoP) {
   fp2 *yy = &isoP->y;
 
   fp2 t1 = {0}, t2 = {0}, t3 = {0}, t4 = {0}, t5 = {0}, one = {0};
-  fp2_Set(&one, 1, 0);
+  fp2_Unity(&one);
 
   // xx:=-(x*x4^2+x-2*x4)*x*(x*x4-1)^2/((x-x4)^2*(2*x*x4-x4^2-1));
   // yy:=-2*y*x4^2*(x*x4-1)*(x^4*x4^2-4*x^3*x4^3+2*x^2*x4^4+x^4-4*x^3*x4+10*x^2*x4^2-4*x*x4^3-4*x*x4+x4^2+1)/((x-x4)^3*(2*x*x4-x4^2-1)^2);
@@ -693,70 +686,52 @@ void eval_4_iso(const mont_pt_t *P4, const mont_pt_t *P, mont_pt_t *isoP) {
   fp2_Multiply(&t2, &t3, &t4); // t4 = x^4*x4^2
   fp2_Add(&t2, &t4, &t2);      // t2 = x^4+x^4*x4^2
   fp2_Multiply(&t1, &t3, &t4); // t4 = x^2*x4^2
-  fp2_Add(&t4, &t4, &t4);      // t4 = 2*x^2*x4^2
-  fp2_Add(&t4, &t4, &t5);      // t5 = 4*x^2*x4^2
-  fp2_Add(&t5, &t5, &t5);      // t5 = 8*x^2*x4^2
+  fp2_Doub(&t4, &t4);      // t4 = 2*x^2*x4^2
+  fp2_Doub(&t4, &t5);      // t5 = 4*x^2*x4^2
+  fp2_Doub(&t5, &t5);      // t5 = 8*x^2*x4^2
   fp2_Add(&t4, &t5, &t4);      // t4 = 10*x^2*x4^2
   fp2_Add(&t2, &t4, &t2);      // t2 = x^4+x^4*x4^2+10*x^2*x4^2
   fp2_Multiply(&t3, &t3, &t4); // t4 = x4^4
   fp2_Multiply(&t1, &t4, &t5); // t5 = x^2*x4^4
-  fp2_Add(&t5, &t5, &t5);      // t5 = 2*x^2*x4^4
+  fp2_Doub(&t5, &t5);      // t5 = 2*x^2*x4^4
   fp2_Add(&t2, &t5, &t2);      // t2 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4
   fp2_Multiply(&t1, x, &t1);   // t1 = x^3
   fp2_Multiply(x4, &t3, &t4);  // t4 = x4^3
   fp2_Multiply(&t1, &t4, &t5); // t5 = x^3*x4^3
-  fp2_Add(&t5, &t5, &t5);      // t5 = 2*x^3*x4^3
-  fp2_Add(&t5, &t5, &t5);      // t5 = 4*x^3*x4^3
+  fp2_Doub(&t5, &t5);      // t5 = 2*x^3*x4^3
+  fp2_Doub(&t5, &t5);      // t5 = 4*x^3*x4^3
   fp2_Sub(&t2, &t5, &t2); // t2 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3
   fp2_Multiply(&t1, x4, &t1); // t1 = x^3*x4
-  fp2_Add(&t1, &t1, &t1);     // t1 = 2*x^3*x4
-  fp2_Add(&t1, &t1, &t1);     // t1 = 4*x^3*x4
-  fp2_Sub(&t2, &t1,
-          &t1); // t1 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4
+  fp2_Doub(&t1, &t1);     // t1 = 2*x^3*x4
+  fp2_Doub(&t1, &t1);     // t1 = 4*x^3*x4
+  fp2_Sub(&t2, &t1, &t1);
+    // t1 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4
   fp2_Multiply(x, &t4, &t2); // t2 = x*x4^3
-  fp2_Add(&t2, &t2, &t2);    // t2 = 2*x*x4^3
-  fp2_Add(&t2, &t2, &t2);    // t2 = 4*x*x4^3
-  fp2_Sub(
-      &t1, &t2,
-      &t1); // t1 =
-            // x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3
-  fp2_Add(
-      &t1, &t3,
-      &t1); // t1 =
-            // x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2
-  fp2_Add(
-      &t1, &one,
-      &t1); // t1 =
-            // x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1
+  fp2_Doub(&t2, &t2);    // t2 = 2*x*x4^3
+  fp2_Doub(&t2, &t2);    // t2 = 4*x*x4^3
+  fp2_Sub( &t1, &t2, &t1); 
+    // t1 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3
+  fp2_Add( &t1, &t3,&t1); 
+    // t1 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2
+  fp2_Add( &t1, &one, &t1);
+    // t1 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1
   fp2_Multiply(x, x4, &t2); // t2 = x*x4
   fp2_Sub(&t2, &one, &t4);  // t4 = x*x4-1
-  fp2_Add(&t2, &t2, &t2);   // t2 = 2*x*x4
-  fp2_Add(&t2, &t2, &t5);   // t5 = 4*x*x4
-  fp2_Sub(
-      &t1, &t5,
-      &t1); // t1 =
-            // x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4
+  fp2_Doub(&t2, &t2);   // t2 = 2*x*x4
+  fp2_Doub(&t2, &t5);   // t5 = 4*x*x4
+  fp2_Sub(&t1, &t5, &t1);
+    // t1 = x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4
 
-  fp2_Multiply(
-      &t4, &t1,
-      &t1); // t1 =
-            // (x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
-  fp2_Multiply(
-      &t3, &t1,
-      &t1); // t1 =
-            // x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
-  fp2_Multiply(
-      y, &t1,
-      &t1); // t1 =
-            // x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
-  fp2_Add(
-      &t1, &t1,
-      &t1); // t1 =
-            // 2*x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
-  fp2_Negative(
-      &t1,
-      yy); // yy =
-           // -2*x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
+  fp2_Multiply(&t4, &t1, &t1);
+    // t1 = (x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
+  fp2_Multiply( &t3, &t1, &t1);
+    // t1 = x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
+  fp2_Multiply(y, &t1, &t1);
+    // t1 =x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
+  fp2_Doub(&t1, &t1); // t1 =
+    // 2*x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
+  fp2_Negative(&t1, yy);
+    // yy = -2*x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)
   fp2_Sub(&t2, &t3, &t2);      // t2 = 2*x*x4-x4^2
   fp2_Sub(&t2, &one, &t1);     // t1 = 2*x*x4-x4^2-1
   fp2_Sub(x, x4, &t2);         // t2 = x-x4
@@ -764,10 +739,8 @@ void eval_4_iso(const mont_pt_t *P4, const mont_pt_t *P, mont_pt_t *isoP) {
   fp2_Square(&t1, &t5);        // t5 = (x-x4)^2*(2*x*x4-x4^2-1)^2
   fp2_Multiply(&t5, &t2, &t5); // t5 = (x-x4)^3*(2*x*x4-x4^2-1)^2
   fp2_Invert(&t5, &t5);        // t5 = 1/((x-x4)^3*(2*x*x4-x4^2-1)^2)
-  fp2_Multiply(
-      yy, &t5,
-      yy); // yy =
-           // -2*x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)/((x-x4)^3*(2*x*x4-x4^2-1)^2)
+  fp2_Multiply(yy, &t5, yy);
+    // yy = -2*x4^2*(x*x4-1)*(x^4+x^4*x4^2+10*x^2*x4^2+2*x^2*x4^4-4*x^3*x4^3-4*x^3*x4-4*x*x4^3+x4^2+1-4*x*x4)/((x-x4)^3*(2*x*x4-x4^2-1)^2)
 
   fp2_Multiply(&t1, &t2, &t1); // t1 = (x-x4)^2*(2*x*x4-x4^2-1)
   fp2_Invert(&t1, &t1);        // t1 = 1/((x-x4)^2*(2*x*x4-x4^2-1))
@@ -776,12 +749,11 @@ void eval_4_iso(const mont_pt_t *P4, const mont_pt_t *P, mont_pt_t *isoP) {
   fp2_Multiply(x, &t1, &t1);   // t1 = x*(x*x4-1)^2/((x-x4)^2*(2*x*x4-x4^2-1))
   fp2_Multiply(x, &t3, &t2);   // t2 = x*x4^2
   fp2_Add(&t2, x, &t2);        // t2 = x*x4^2+x
-  fp2_Add(x4, x4, &t3);        // t3 = 2*x4
+  fp2_Doub(x4, &t3);        // t3 = 2*x4
   fp2_Sub(&t2, &t3, &t2);      // t2 = x*x4^2+x-2*x4
   fp2_Negative(&t2, &t2);      // t2 = -(x*x4^2+x-2*x4)
-  fp2_Multiply(
-      &t1, &t2,
-      xx); // xx = -(x*x4^2+x-2*x4)*x*(x*x4-1)^2/((x-x4)^2*(2*x*x4-x4^2-1))
+  fp2_Multiply(&t1, &t2, xx);
+    // xx = -(x*x4^2+x-2*x4)*x*(x*x4-1)^2/((x-x4)^2*(2*x*x4-x4^2-1))
 }
 
 void curve_4_iso(const mont_pt_t *P4, const mont_curve_int_t *E,
@@ -800,8 +772,8 @@ void curve_4_iso(const mont_pt_t *P4, const mont_curve_int_t *E,
 
   fp2_Square(x4, &t1);  // t1 = x4^2
   fp2_Square(&t1, aa);  // aa = x4^4
-  fp2_Add(aa, aa, aa);  // aa = 2*x4^4
-  fp2_Add(aa, aa, aa);  // aa = 4*x4^4
+  fp2_Doub(aa, aa);  // aa = 2*x4^4
+  fp2_Doub(aa, aa);  // aa = 4*x4^4
   fp2_Set(&t2, 2, 0);   // t2 = 2
   fp2_Sub(aa, &t2, aa); // aa = 4*x4^4-2
 
@@ -817,27 +789,18 @@ void iso_2_e(int e, const mont_curve_int_t *E, mont_pt_t *S,
              const mont_pt_t *P1, const mont_pt_t *P2, mont_curve_int_t *isoE,
              mont_pt_t *isoP1, mont_pt_t *isoP2) {
 
-  int p1Eval = P1 != NULL, p2Eval = P2 != NULL;
+  int p1Inf = mont_is_inf_affine(P1), p2Inf = mont_is_inf_affine(P2);
 
   mont_pt_t T = {0};
   mont_curve_copy(E, isoE);
-
-  if (p1Eval)
-    mont_pt_copy(P1, isoP1);
-
-  if (p2Eval)
-    mont_pt_copy(P2, isoP2);
 
   if (e % 2) {
     xDBLe(isoE, S, e - 1, &T);
     curve_2_iso(&T, isoE, isoE);
     eval_2_iso(&T, S, S);
 
-    if (p1Eval)
-      eval_2_iso(&T, isoP1, isoP1);
-
-    if (p2Eval)
-      eval_2_iso(&T, isoP2, isoP2);
+    if (p1Inf) mont_set_inf_affine(isoP1); else eval_2_iso(&T, isoP1, isoP1);
+    if (p2Inf) mont_set_inf_affine(isoP2); else eval_2_iso(&T, isoP2, isoP2);
 
     e--;
   }
@@ -848,11 +811,8 @@ void iso_2_e(int e, const mont_curve_int_t *E, mont_pt_t *S,
 
     eval_4_iso(&T, S, S);
 
-    if (p1Eval)
-      eval_4_iso(&T, isoP1, isoP1);
-
-    if (p2Eval)
-      eval_4_iso(&T, isoP2, isoP2);
+    if (p1Inf) mont_set_inf_affine(isoP1); else eval_4_iso(&T, isoP1, isoP1);
+    if (p2Inf) mont_set_inf_affine(isoP2); else eval_4_iso(&T, isoP2, isoP2);
   }
 }
 
@@ -860,16 +820,11 @@ void iso_3_e(int e, const mont_curve_int_t *E, mont_pt_t *S,
              const mont_pt_t *P1, const mont_pt_t *P2, mont_curve_int_t *isoE,
              mont_pt_t *isoP1, mont_pt_t *isoP2) {
 
-  int p1Eval = P1 != NULL, p2Eval = P2 != NULL;
+  int p1Inf = mont_is_inf_affine(P1), p2Inf = mont_is_inf_affine(P2);
 
   mont_pt_t T = {0};
   mont_curve_copy(E, isoE);
 
-  if (p1Eval)
-    mont_pt_copy(P1, isoP1);
-
-  if (p2Eval)
-    mont_pt_copy(P2, isoP2);
 
   for (int i = e - 1; i >= 0; --i) {
     xTPLe(isoE, S, i, &T);
@@ -877,124 +832,227 @@ void iso_3_e(int e, const mont_curve_int_t *E, mont_pt_t *S,
 
     eval_3_iso(&T, S, S);
 
-    if (p1Eval)
-      eval_3_iso(&T, isoP1, isoP1);
-
-    if (p2Eval)
-      eval_3_iso(&T, isoP2, isoP2);
+    if (p1Inf) mont_set_inf_affine(isoP1); else eval_3_iso(&T, isoP1, isoP1);
+    if (p2Inf) mont_set_inf_affine(isoP2); else eval_3_iso(&T, isoP2, isoP2);
+    
   }
 }
 
+void get_xR(const mont_curve_int_t *curve, sike_public_key_t *pk) {
+
+  mont_pt_t R = {0};
+
+  xNEGATE(&curve->Q, &R);
+
+  xADD(curve, &curve->P, &R, &R);
+  fp2_Copy(&curve->P.x, &pk->xP);
+  fp2_Copy(&curve->Q.x, &pk->xQ);
+  fp2_Copy(&R.x, &pk->xR);
+}
+
+void get_A(const sike_public_key_t *pk, fp2* a) {
+  fp2 t0 = {0}, t1 = {0}, one = {0};
+  fp2_Unity(&one);
+  
+  const fp2 *xP = &pk->xP;
+  const fp2 *xQ = &pk->xQ;
+  const fp2 *xR = &pk->xR;
+  
+  fp2_Add(xP, xQ, &t1);
+  fp2_Multiply(xP, xQ, &t0);
+  fp2_Multiply(xR, &t1, a);
+  fp2_Add(&t0, a, a);
+  fp2_Multiply(xR, &t0, &t0);
+  fp2_Sub(a, &one, a);
+  fp2_Doub(&t0, &t0);
+  fp2_Add(&t1, xR, &t1);
+  fp2_Doub(&t0, &t0);
+  fp2_Square(a, a);
+  fp2_Invert(&t0, &t0);
+  fp2_Multiply(a, &t0, a);
+  fp2_Sub(a, &t1, a);
+}
+
+
+void get_yP_yQ_A_B(const sike_public_key_t *pk, mont_curve_int_t *curve) {
+
+  fp2 *a = &curve->a;
+  fp2 *b = &curve->b;
+  mont_pt_t *P = &curve->P;
+  mont_pt_t *Q = &curve->Q;
+
+  const fp2 *xP = &pk->xP;
+  const fp2 *xQ = &pk->xQ;
+  const fp2 *xR = &pk->xR;
+
+  mont_pt_t T = {0};
+
+  fp2 *t1 = &T.x, *t2 = &T.y;
+  
+  get_A(pk, a);
+  
+  fp2_Square(xP, t1);       // t1 = xP^2
+  fp2_Multiply(xP, t1, t2); // t2 = xP^3
+  fp2_Multiply(a, t1, t1);  // t1 = a*xP^2
+  fp2_Add(t2, t1, t1);      // t1 = xP^3+a*xP^2
+  fp2_Add(t1, xP, t1);      // t1 = xP^3+a*xP^2+xP
+  fp2_Sqrt(t1, &P->y);      // yP = sqrt(xP^3+a*xP^2+xP)
+
+  fp2_Square(xQ, t1);       // t1 = xQ^2
+  fp2_Multiply(xQ, t1, t2); // t2 = xQ^3
+  fp2_Multiply(a, t1, t1);  // t1 = a*xQ^2
+  fp2_Add(t2, t1, t1);      // t1 = xQ^3+a*xQ^2
+  fp2_Add(t1, xQ, t1);      // t1 = xQ^3+a*xQ^2+xQ
+  fp2_Sqrt(t1, &Q->y);      // yQ = sqrt(xQ^3+a*xQ^2+xQ)
+
+  fp2_Copy(xP, &P->x);
+  fp2_Copy(xQ, &Q->x);
+
+  fp2_Unity(b);
+  xNEGATE(Q, &T);
+  xADD(curve, P, &T, &T);
+
+  if (!fp2_IsEqual(&T.x, xR))
+    fp2_Negative(&Q->y, &Q->y);
+}
+
+//
+// SIDH
+//
+
 void sike_isogen_2(const sike_params_t *params, sike_public_key_t *pk,
                    const sike_private_key_2 *sk2) {
+                     
+  const mont_curve_int_t *C, *D;
+  
+  C = &params->EA;
+  D = &params->EB;
+  
   mont_curve_int_t pkInt = {0};
-  mont_pt_t iP3 = {0};
-  mont_pt_t iQ3 = {0};
+  mont_curve_copy(D, &pkInt);
 
-  uint16_t e = E2;
+  uint16_t e = PARE2;
   uint16_t msb = MSBA;
 
   mont_pt_t S = {0};
 
   fp sk;
   fp_Constant(*sk2, &sk);
-
+  
   // Generate kernel
   // S:=P2+SK_2*Q2;
-  mont_double_and_add(&params->startingCurve, &sk, &params->param_Q2, &S, msb);
-  xADD(&params->startingCurve, &params->param_P2, &S, &S);
+  mont_double_and_add(C, &sk, &C->Q, &S, msb);
+  xADD(C, &C->P, &S, &S);
 
-  iso_2_e((int)e, &params->startingCurve, &S, &params->param_P3,
-          &params->param_Q3, &pkInt, &iP3, &iQ3);
-  get_xR(&pkInt, &iP3, &iQ3, pk);
+  iso_2_e((int)e, &pkInt, &S, &pkInt.P,
+          &pkInt.Q, &pkInt, &pkInt.P, &pkInt.Q);       
+  get_xR(&pkInt, pk);
 }
 
 void sike_isogen_3(const sike_params_t *params, sike_public_key_t *pk,
                    const sike_private_key_3 *sk3) {
+  
+  const mont_curve_int_t *C, *D;
+  
+  C = &params->EB;
+  D = &params->EA;
+  
   mont_curve_int_t pkInt = {0};
-  mont_pt_t iP2 = {0};
-  mont_pt_t iQ2 = {0};
+  mont_curve_copy(D, &pkInt);
 
-  uint16_t e = E3;
+  uint16_t e = PARE3;
   uint16_t msb = MSBB;
 
   mont_pt_t S = {0};
 
   fp sk;
   fp_Constant(*sk3, &sk);
-
+  
   // Generate kernel
   // S:=P2+SK_2*Q2;
-  mont_double_and_add(&params->startingCurve, &sk, &params->param_Q3, &S, msb);
-  xADD(&params->startingCurve, &params->param_P3, &S, &S);
+  mont_double_and_add(C, &sk, &C->Q, &S, msb);
+  xADD(C, &C->P, &S, &S);
 
-  iso_3_e((int)e, &params->startingCurve, &S, &params->param_P2,
-          &params->param_Q2, &pkInt, &iP2, &iQ2);
-  get_xR(&pkInt, &iP2, &iQ2, pk);
+  iso_3_e((int)e, &pkInt, &S, &pkInt.P,
+          &pkInt.Q, &pkInt, &pkInt.P, &pkInt.Q);
+  get_xR(&pkInt, pk);
+
 }
 
 void sike_isoex_2(const sike_params_t *params, const sike_public_key_t *pkO,
                   const sike_private_key_2 *sk2I, fp2 *secret) {
   mont_curve_int_t E = {0};
-  mont_pt_t iP3 = {0};
-  mont_pt_t iQ3 = {0};
-
-  uint16_t e = E2;
+  
+  uint16_t e = PARE2;
   uint16_t msb = MSBA;
 
   mont_pt_t S = {0};
-  get_yP_yQ_A_B(pkO, &iP3, &iQ3, &E);
+  get_yP_yQ_A_B(pkO, &E);
 
   fp skI;
   fp_Constant(*sk2I, &skI);
 
-  mont_double_and_add(&E, &skI, &iQ3, &S, msb);
-  xADD(&E, &iP3, &S, &S);
-
-  iso_2_e((int)e, &E, &S, NULL, NULL, &E, NULL, NULL);
+  mont_double_and_add(&E, &skI, &E.Q, &S, msb);
+  xADD(&E, &E.P, &S, &S);
+  mont_set_inf_affine(&E.P);
+  mont_set_inf_affine(&E.Q);
+  iso_2_e((int)e, &E, &S, &E.P, &E.Q, &E, &E.P, &E.Q);
   j_inv(&E, secret);
 }
 
 void sike_isoex_3(const sike_params_t *params, const sike_public_key_t *pkO,
                   const sike_private_key_3 *sk3I, fp2 *secret) {
   mont_curve_int_t E = {0};
-  mont_pt_t iP2 = {0};
-  mont_pt_t iQ2 = {0};
 
-  uint16_t e = E3;
+  uint16_t e = PARE3;
   uint16_t msb = MSBB;
 
   mont_pt_t S = {0};
-  get_yP_yQ_A_B(pkO, &iP2, &iQ2, &E);
+  get_yP_yQ_A_B(pkO, &E);
 
   fp skI;
   fp_Constant(*sk3I, &skI);
 
-  mont_double_and_add(&E, &skI, &iQ2, &S, msb);
-  xADD(&E, &iP2, &S, &S);
-
-  iso_3_e((int)e, &E, &S, NULL, NULL, &E, NULL, NULL);
+  mont_double_and_add(&E, &skI, &E.Q, &S, msb);
+  xADD(&E, &E.P, &S, &S);
+  mont_set_inf_affine(&E.P);
+  mont_set_inf_affine(&E.Q);
+  iso_3_e((int)e, &E, &S, &E.P, &E.Q, &E, &E.P, &E.Q);
   j_inv(&E, secret);
 }
 
 // Pretty printing
-static void printFP2(const fp2 z) {
+void printFP(const fp z) {
+  printf("0x%08x\n", z);
+}
+
+void printFP2(const fp2 z) {
   printf("{x0 = 0x%08x, x1 = 0x%08x}\n", z.x0, z.x1);
 }
 
-static void printPoint(const mont_pt_t P) {
+void printPoint(const mont_pt_t P) {
   printf("{x = {x0 = 0x%08x, x1 = 0x%08x}, y = {x0 = 0x%08x, x1 = 0x%08x}}\n",
          P.x.x0, P.x.x1, P.y.x0, P.y.x1);
 }
 
-static void printCurve(const mont_curve_int_t C) {
+void printCurve(const mont_curve_int_t C) {
   printf("{a = {x0 = 0x%08x, x1 = 0x%08x}, b = {x0 = 0x%08x, x1 = 0x%08x}}\n",
          C.a.x0, C.a.x1, C.b.x0, C.b.x1);
 }
 
-static void printPublicKey(const sike_public_key_t K) {
+void printPublicKey(const sike_public_key_t K) {
   printf("%08x %08x, %08x %08x, %08x %08x\n", K.xP.x0, K.xP.x1, K.xQ.x0,
          K.xQ.x1, K.xR.x0, K.xR.x1);
+}
+
+void printOctetString(const uint8_t* os, size_t len) {
+  printf("[");
+  int i;
+  for(i = 0; i < len - 1; i++) {
+    printf("0x%02x, ", os[i]);
+  }
+  printf("0x%02x", os[i]);
+  printf("]\n");
 }
 
 
@@ -1002,7 +1060,6 @@ static void printPublicKey(const sike_public_key_t K) {
 void gen3ex2(sike_private_key_2 *a, sike_private_key_3 *b, fp2 *c) {
   sike_params_t params;
   sike_setup_params(&sikeRawParams, &params);
-  sike_public_key_t pkA = {0};
   sike_public_key_t pkB = {0};
   sike_isogen_3(&params, &pkB, b);
   sike_isoex_2(&params, &pkB, a, c);
@@ -1012,43 +1069,42 @@ void gen2ex3(sike_private_key_2 *a, sike_private_key_3 *b, fp2 *c) {
   sike_params_t params;
   sike_setup_params(&sikeRawParams, &params);
   sike_public_key_t pkA = {0};
-  sike_public_key_t pkB = {0};
-  sike_isogen_2(&params, &pkB, a);
-  sike_isoex_3(&params, &pkB, b, c);
+  sike_isogen_2(&params, &pkA, a);
+  unsigned char pkos[24];
+  pktoos(&pkA, pkos);
+  printOctetString(pkos, 24);
+  ostopk(pkos, &pkA);
+  sike_isoex_3(&params, &pkA, b, c);
 }
 
-int isogenWork(sike_private_key_2 *a, sike_private_key_2 *b) {
+int secretShared(sike_private_key_2 *a, sike_private_key_2 *b) {
   fp2 c1 = {0}, c2 = {0};
   gen2ex3(a, b, &c1);
   gen3ex2(a, b, &c2);
   return fp2_IsEqual(&c1, &c2);
 }
 
-
-
-// Encodings
-void itoos (const uint32_t dec, char* enc) {
-  sprintf(enc, "%08x", dec);
-}
-
-void ostoi (char* enc, const uint32_t dec) {
-  sprintf(enc, "%08x", dec);
-}
-
 int main(int argc, char *argv[]) {
-
-  sike_private_key_2 skA = (uint16_t)strtol(argv[1], NULL, 10);
-  // Range here is 0 to 32767.
-
-  sike_private_key_3 skB = (uint16_t)strtol(argv[2], NULL, 10);
-  // Range here is 0 to 6560, although in practice it's 0 to 4095.
-  char enc[8];
-  //itoos (, enc);
-  //printf("%s\n", enc);
+  sike_private_key_2 skA;
+  sike_private_key_3 skB;
+  if (argc == 1) {
+    skA = 0;
+    skB = 0;
+  }
+  else {
+    skA = (uint16_t)strtol(argv[1], NULL, 10); // Range here is 0 to 32767.
+    if (argc == 2) {
+      skB = 0;
+    }
+    else {
+      skB = (uint16_t)strtol(argv[2], NULL, 10);   // Range here is 0 to 6560, although in practice it's 0 to 4095.
+    }
+  }
   fp2 c;
   gen2ex3(&skA, &skB, &c);
   printFP2(c);
-  //printf("%d\n", isogenWork(&skA, &skB));
-
-  return 0;
+  fp2 d;
+  gen3ex2(&skA, &skB, &d);
+  printFP2(d);
+  return fp2_IsEqual(&c, &d);
 }
