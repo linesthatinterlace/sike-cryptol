@@ -1,6 +1,10 @@
 //Constants.
 
 #define MODULUS 0x0cd07fff
+#define E2 15
+#define E3 8
+#define MSBA 15
+#define MSBB 12
 #define XP21 0x0a7e21eb
 #define XP22 0x09ab3afb
 #define YP21 0x0366529e
@@ -134,7 +138,7 @@ void public_key_clear(sike_public_key_t* pk);
 
 void mont_pt_copy(const mont_pt_t* src, mont_pt_t* dst);
 
-void mont_double_and_add(const mont_curve_int_t *curve, const fp k, const mont_pt_t *P, mont_pt_t *Q, int msb);
+void mont_double_and_add(const mont_curve_int_t *curve, const fp k, const mont_pt_t *P, mont_pt_t *Q, uint16_t msb);
 
 void xDBL(const mont_curve_int_t *curve, const mont_pt_t *P, mont_pt_t *R);
 
@@ -165,6 +169,7 @@ typedef struct {
 } sike_params_t;
 
 typedef struct {
+    uint32_t param_p;
     uint32_t param_cA1;
     uint32_t param_cA2;
     uint32_t param_cB1;
@@ -217,12 +222,13 @@ void iso_3_e(int e, const mont_curve_int_t *E, mont_pt_t *S, const mont_pt_t *P1
 
 // SIDH 
 
-typedef uint32_t * sike_private_key;
+typedef uint16_t sike_private_key_2;
+typedef uint16_t sike_private_key_3;
 
-void sike_isogen_2(const sike_params_t *params, sike_public_key_t *pk, const sike_private_key sk);
+void sike_isogen_2(const sike_params_t *params, sike_public_key_t *pk, const sike_private_key_2 sk2);
 
-void sike_isogen_3(const sike_params_t *params, sike_public_key_t *pk, const sike_private_key sk);
+void sike_isogen_3(const sike_params_t *params, sike_public_key_t *pk, const sike_private_key_2 sk2);
 
-void sike_isoex_2(const sike_params_t *params, const sike_public_key_t *pkO, const sike_private_key skI, fp2 *secret);
+void sike_isoex_2(const sike_params_t *params, const sike_public_key_t *pkO, const sike_private_key_2 sk2I, fp2 *secret);
 
-void sike_isoex_3(const sike_params_t *params, const sike_public_key_t *pkO, const sike_private_key skI, fp2 *secret);
+void sike_isoex_3(const sike_params_t *params, const sike_public_key_t *pkO, const sike_private_key_3 sk3I, fp2 *secret);

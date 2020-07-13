@@ -24,7 +24,17 @@ startingCurve = mkMC (mkFP2 0x00000006 0x00000000) (mkFP2 0x00000001 0x00000000)
 //
 
 // p = 214990847
-modulus = 0x0cd07fff
+type p = 214990847
+type e2 = 15
+type e3 = 8
+type msbA = 15
+type msbB = 12
+type Nsk2 = 15 /^ 8
+type Nsk3 = 12 /^ 8
+type Nsk = max Nsk2 Nsk3
+type Np = 4
+
+modulus = `p : [Np*8] // 0x0cd07fff
 param_P2 = mkAffine (mkFP2 0x0a7e21eb 0x09ab3afb) (mkFP2 0x0366529e 0x00615a32)
 param_Q2 = mkAffine (mkFP2 0x09875b2b 0x076a3372) (mkFP2 0x00216b6b 0x0b6465ec)
 param_P3 = mkAffine (mkFP2 0x09aa9e25 0x00000000) (mkFP2 0x040d8353 0x00000000)
@@ -35,26 +45,28 @@ param_Q3 = mkAffine (mkFP2 0x0b96ade2 0x00000000) (mkFP2 0x00000000 0x082a1f97)
 // Data type conversions.
 // 
 
-ostofp : [4][8] -> Fp
+ostofp : [Np][8] -> Fp
 ostofp os = if (a >= modulus) then error "Octet string does not represent a member of F_p." else a
     where a = (reverse ~~> join) os
 
-fptoos : Fp -> [4][8]
+fptoos : Fp -> [Np][8]
 fptoos = (\x -> x % modulus) ~~> split ~~> reverse
 
-ostofp2 : [8][8] -> Fp2
+ostofp2 : [2*Np][8] -> Fp2
 ostofp2 os = mkFP2 x0 x1
     where [x0, x1] = map ostofp <~ split`{2} os
 
-fp2toos : Fp2 -> [8][8]
+fp2toos : Fp2 -> [2*Np][8]
 fp2toos a = os
     where os = (map fptoos ~~> join) [a.x0, a.x1]
 
-ostopk : [24][8] -> [3]Fp2
-ostopk = split ~~> map ostofp2
+ostopk : [3*2*Np][8] -> PublicKey
+ostopk os = mkPublicKey xP xQ xR
+    where [xP, xQ, xR] = map ostofp2 <~ split`{3} os
 
-pktoos : [3]Fp2 -> [24][8]
-pktoos = map fp2toos ~~> join
+pktoos : PublicKey -> [3*2*Np][8]
+pktoos a = os
+    where os = (map fp2toos ~~> join) [a.xP, a.xQ, a.xR]
 
 cast32To64 : [32] -> [64]
 cast32To64 = zext
@@ -336,9 +348,10 @@ xTPLe e C P  = ys @ e
                 where ys = iterate (xTPL C) P
 
 // Algorithm 30
-double_and_add : {n} (fin n) => MontgomeryCurve -> EllipticPoint -> [n] -> EllipticPoint
-double_and_add C P n = bs ! 0
-                        where bs = [pointAtInfinity] # [ if bit then xADD C P (xDBL C b) else xDBL C b | b <- bs | bit <- n ]
+double_and_add : {msb, n} (msb <= n, fin n) => MontgomeryCurve -> EllipticPoint -> [n] -> EllipticPoint
+double_and_add C P k = bs ! 0
+        where   bs = [pointAtInfinity] # [ if bit then xADD C P (xDBL C b) else xDBL C b | b <- bs | bit <- k' ]
+                k' = drop`{n - msb} k
 
 // Algorithm 31
 j_inv : MontgomeryCurve ->  Fp2
@@ -590,16 +603,16 @@ iso_3_e_step k y = {S = S', C = C', Ps = Ps'}
             Ps' = map (eval_3_iso T) y.Ps
 
 // Algorithm 10
-get_A : [3]Fp2 -> Fp2
-get_A [xP, xQ, xR] = A
-    where   t1  = fp2Add xP xQ
-            t2  = fp2Mult xP xQ
-            t3  = fp2Mult xR t1
+get_A : PublicKey -> Fp2
+get_A pk = A
+    where   t1  = fp2Add pk.xP pk.xQ
+            t2  = fp2Mult pk.xP pk.xQ
+            t3  = fp2Mult pk.xR t1
             t4  = fp2Add t3 t2
-            t5  = fp2Mult t2 xR
+            t5  = fp2Mult t2 pk.xR
             t6  = fp2Subt t4 fp2MultUnit
             t7  = fp2Doub t5
-            t8  = fp2Add t1 xR
+            t8  = fp2Add t1 pk.xR
             t9  = fp2Doub t7
             t10 = fp2Square t6
             t11 = fp2MultInv t9
@@ -612,80 +625,82 @@ get_xR : MontgomeryCurve -> EllipticPoint -> EllipticPoint -> Fp2
 get_xR C P Q = (xADD C P (mkAffine Q.x (fp2AddInv Q.y))).x
 
 // Algorithm 41
-get_yP_yQ_A_B : [24][8] -> (EllipticPoint, EllipticPoint, MontgomeryCurve)
+get_yP_yQ_A_B : PublicKey -> (EllipticPoint, EllipticPoint, MontgomeryCurve)
 get_yP_yQ_A_B pk = (P, Q', C)
-    where   [xP, xQ, xR] = ostopk pk
-            t1  = get_A [xP, xQ, xR]
+    where   t1  = get_A pk
             t2  = fp2MultUnit
-            t3  = fp2Square xP
-            t4  = fp2Mult xP t3
+            t3  = fp2Square pk.xP
+            t4  = fp2Mult pk.xP t3
             t5  = fp2Mult t1 t3
             t6  = fp2Add t4 t5
-            t7  = fp2Add t6 xP
+            t7  = fp2Add t6 pk.xP
             t8  = fp2Sqrt t7
-            t9  = fp2Square xQ
-            t10 = fp2Mult xQ t9
+            t9  = fp2Square pk.xQ
+            t10 = fp2Mult pk.xQ t9
             t11 = fp2Mult t1 t9
             t12 = fp2Add t10 t11
-            t13 = fp2Add t12 xQ
+            t13 = fp2Add t12 pk.xQ
             t14 = fp2Sqrt t13        
             yP  = t8
             yQ  = t14
             C   = mkMC t1 t2
-            P   = mkAffine xP yP
-            Q   = mkAffine xQ yQ
-            yQ' = if ~( fp2Cmp (get_xR C P Q) xR ) then fp2AddInv yQ else yQ
-            Q'  = mkAffine xQ yQ'
+            P   = mkAffine pk.xP yP
+            Q   = mkAffine pk.xQ yQ
+            yQ' = if ~( fp2Cmp (get_xR C P Q) pk.xR ) then fp2AddInv yQ else yQ
+            Q'  = mkAffine pk.xQ yQ'
 
 //
 // isogen_l and isoex_l for l in {2, 3}
 //
 
+type PublicKey = {xP : Fp2, xQ : Fp2, xR : Fp2}
+
+type SecretKeyTwo = [Nsk2*8]
+type SecretKeyThree = [Nsk3*8]
+
+mkPublicKey : Fp2 -> Fp2 -> Fp2 -> PublicKey
+mkPublicKey xP' xQ' xR' = {xP = xP', xQ = xQ', xR = xR'}
+
+
 // Algorithm 42
-isogen_2 : [2][8] -> [24][8]
+isogen_2 : SecretKeyTwo -> PublicKey
 isogen_2 sk2 = pk2
-    where   exponent = (reverse ~~> join) sk2
-            S = xADD startingCurve param_P2 (double_and_add startingCurve param_Q2 exponent )
-            (C, [P3', Q3']) = iso_2_e`{15} S (startingCurve, [param_P3, param_Q3])
+    where   S = xADD startingCurve param_P2 (double_and_add`{msbA} startingCurve param_Q2 sk2 )
+            (C, [P3', Q3']) = iso_2_e`{e2} S (startingCurve, [param_P3, param_Q3])
             xP3' = P3'.x
             xQ3' = Q3'.x
             xR3' = get_xR C P3' Q3'
-            pk2 = pktoos [xP3', xQ3', xR3']
+            pk2 = mkPublicKey xP3' xQ3' xR3'
 
 // Algorithm 43
-isogen_3 : [2][8] -> [24][8]
+isogen_3 : SecretKeyThree -> PublicKey
 isogen_3 sk3 = pk3
-    where   exponent = (reverse ~~> join) sk3
-            S = xADD startingCurve param_P3 (double_and_add startingCurve param_Q3 exponent)
-            (C, [P2', Q2']) = iso_3_e`{8} S (startingCurve, [param_P2, param_Q2])
+    where   S = xADD startingCurve param_P3 (double_and_add`{msbB} startingCurve param_Q3 sk3)
+            (C, [P2', Q2']) = iso_3_e`{e3} S (startingCurve, [param_P2, param_Q2])
             xP2' = P2'.x
             xQ2' = Q2'.x
             xR2' = get_xR C P2' Q2'
-            pk3 = pktoos [xP2', xQ2', xR2']
+            pk3 = mkPublicKey xP2' xQ2' xR2'
 
 // Algorithm 44
-isoex_2 : [24][8] -> [2][8] -> [8][8]
+isoex_2 : PublicKey -> SecretKeyTwo -> Fp2
 isoex_2 pk3 sk2 = j2
-    where   exponent = (reverse ~~> join) sk2
-            [xP2', xQ2', xR2'] = ostopk pk3
-            (P2', Q2', C) = get_yP_yQ_A_B pk3
-            S = xADD C P2' (double_and_add C Q2' exponent)
-            (C', _) = iso_2_e`{15} S (C, [])
-            j2 = fp2toos <~ j_inv C'
+    where   (P2', Q2', C) = get_yP_yQ_A_B pk3
+            S = xADD C P2' (double_and_add`{msbA} C Q2' sk2)
+            (C', _) = iso_2_e`{e2} S (C, [])
+            j2 = j_inv C'
 
 
 // Algorithm 45
-isoex_3 : [24][8] -> [2][8] -> [8][8]
+isoex_3 : PublicKey -> SecretKeyThree -> Fp2
 isoex_3 pk2 sk3 = j3
-    where   exponent = (reverse ~~> join) sk3
-            [xP3', xQ3', xR3'] = ostopk pk2
-            (P3', Q3', C) = get_yP_yQ_A_B pk2
-            S = xADD C P3' (double_and_add C Q3' exponent)
-            (C', _) = iso_3_e`{8} S (C, [])
-            j3 = fp2toos <~ j_inv C'
+    where   (P3', Q3', C) = get_yP_yQ_A_B pk2
+            S = xADD C P3' (double_and_add`{msbB} C Q3' sk3)
+            (C', _) = iso_3_e`{e3} S (C, [])
+            j3 = j_inv C'
 
 
-isogenWork: ([2][8], [2][8]) -> Bool
+isogenWork: (SecretKeyTwo, SecretKeyThree) -> Bool
 isogenWork (secretKeyAlice, secretKeyBob) = sharedSecretAlice == sharedSecretBob
     where
         publicKeyAlice      = isogen_2 secretKeyAlice
@@ -693,17 +708,11 @@ isogenWork (secretKeyAlice, secretKeyBob) = sharedSecretAlice == sharedSecretBob
         sharedSecretAlice   = isoex_2 publicKeyBob secretKeyAlice
         sharedSecretBob     = isoex_3 publicKeyAlice secretKeyBob
 
-gen3ex2 : [16] -> [16] -> Fp2
-gen3ex2 a b = ostofp2 z
-    where z = isoex_2 (isogen_3 sk3) sk2
-          sk2 = (split ~~> reverse) a
-          sk3 = (split ~~> reverse) b
+gen3ex2 : SecretKeyTwo -> SecretKeyThree -> Fp2
+gen3ex2 sk2 sk3 = isoex_2 (isogen_3 sk3) sk2
 
-gen2ex3 : [16] -> [16] -> Fp2
-gen2ex3 a b = ostofp2 z
-    where z = isoex_3 (isogen_2 sk2) sk3
-          sk2 = (split ~~> reverse) a
-          sk3 = (split ~~> reverse) b
+gen2ex3 : SecretKeyTwo -> SecretKeyThree -> Fp2
+gen2ex3 sk2 sk3 = isoex_3 (isogen_2 sk2) sk3
 
 property secretShared a b = gen3ex2 a b == gen2ex3 a b
 
