@@ -39,27 +39,27 @@ void sike_setup_params(const sike_params_raw_t *raw, sike_params_t *params) {
   fp2_Set(&EA->b, raw->cB1, raw->cB2);
   fp2_Set(&EB->a, raw->cA1, raw->cA2);
   fp2_Set(&EB->b, raw->cB1, raw->cB2);
-  fp2_Set(&EA->P.x, raw->xp21, raw->xp22);
-  fp2_Set(&EA->P.y, raw->yp21, raw->yp22);
-  fp2_Set(&EA->Q.x, raw->xq21, raw->xq22);
-  fp2_Set(&EA->Q.y, raw->yq21, raw->yq22);
-  fp2_Set(&EB->P.x, raw->xp31, raw->xp32);
-  fp2_Set(&EB->P.y, raw->yp31, raw->yp32);
-  fp2_Set(&EB->Q.x, raw->xq31, raw->xq32);
-  fp2_Set(&EB->Q.y, raw->yq31, raw->yq32);
-};
+  fp2_Set(&P2->x, raw->xp21, raw->xp22);
+  fp2_Set(&P2->y, raw->yp21, raw->yp22);
+  fp2_Set(&Q2->x, raw->xq21, raw->xq22);
+  fp2_Set(&Q2->y, raw->yq21, raw->yq22);
+  fp2_Set(&P3->x, raw->xp31, raw->xp32);
+  fp2_Set(&P3->y, raw->yp31, raw->yp32);
+  fp2_Set(&Q3->x, raw->xq31, raw->xq32);
+  fp2_Set(&Q3->y, raw->yq31, raw->yq32);
+}
 
 
 // Encodings
 void itoos (const uint32_t * to_enc, uint8_t* enc) {
-  for (int i = 0; i < sizeof(*to_enc); i++) {
+  for (size_t i = 0; i < sizeof(*to_enc); i++) {
     enc[i] = (uint8_t)(*to_enc >> (8 * i));
   }
 }
 
 void ostoi (const uint8_t* to_dec, uint32_t *dec, size_t len) {
   uint32_t acc = 0;
-  for (int i = 0; i < len; i++) {
+  for (size_t i = 0; i < len; i++) {
     acc += to_dec[i] << (8 * i);
   }
   *dec = acc;
@@ -112,7 +112,7 @@ void fp_Constant(uint32_t a, fp *b) { *b = a % MODULUS; }
 
 void fp_Copy(const fp *src, fp *dst) { *dst = *src; }
 
-int fp_IsEqual(const fp *a, const fp *b) {
+int fp_Cmp(const fp *a, const fp *b) {
   return (*a % MODULUS) == (*b % MODULUS);
 }
 
@@ -128,8 +128,9 @@ int fp_IsBitSet(const fp *a, const int index) {
   return (*a & (1 << index)) >> index;
 }
 
-int fp_IsConstant(const fp *a, const size_t constant) {
-  return (*a % MODULUS) == (constant % MODULUS);
+int fp_IsConstant(const fp *a, const uint32_t constant) {
+  const fp k = constant;
+  return fp_Cmp(a, &k);
 }
 
 void fp_Multiply(const fp *a, const fp *b, fp *c) {
@@ -140,6 +141,10 @@ void fp_Negative(const fp *a, fp *b) {
   fp t1;
   fp_Constant(*a, &t1);
   *b = (t1 == 0) ? 0 : MODULUS - (*a % MODULUS);
+}
+
+void fp_Square(const fp* a, fp* b) { 
+  fp_Multiply(a, a, b);
 }
 
 void fp_Pow(const fp *a, const fp *b, fp *c) {
@@ -159,13 +164,11 @@ int fp_QuadNonRes(const fp *a) {
   fp t1;
   fp_Sqrt(a, &t1);
   fp_Square(&t1, &t1);
-  if (fp_IsEqual(a, &t1))
+  if (fp_Cmp(a, &t1))
     return 0;
   else
     return 1;
 }
-
-void fp_Square(const fp *a, fp *b) { fp_Multiply(a, a, b); }
 
 void fp_Sqrt(const fp *a, fp *b) {
   fp t1, p14;
@@ -206,8 +209,8 @@ void fp2_Copy(const fp2 *a, fp2 *b) {
   fp_Copy(&a->x1, &b->x1);
 }
 
-int fp2_IsEqual(const fp2 *a1, const fp2 *a2) {
-  return fp_IsEqual(&a1->x0, &a2->x0) && fp_IsEqual(&a1->x1, &a2->x1);
+int fp2_Cmp(const fp2 *a1, const fp2 *a2) {
+  return fp_Cmp(&a1->x0, &a2->x0) && fp_Cmp(&a1->x1, &a2->x1);
 }
 
 void fp2_Set(fp2 *fp2, uint32_t x0, uint32_t x1) {
@@ -301,7 +304,7 @@ void fp2_Sqrt(const fp2 *a, fp2 *b) {
     fp_Multiply(&t2, &inv2, &t2);
 
     fp_Square(&t1, &t3);
-    if (!fp_IsEqual(&t3, &t0)) {
+    if (!fp_Cmp(&t3, &t0)) {
       fp_Copy(&t1, &t0);
       fp_Copy(&t2, &t1);
       fp_Negative(&t0, &t2);
@@ -382,7 +385,7 @@ void xDBL(const mont_curve_int_t *curve, const mont_pt_t *P, mont_pt_t *R) {
 
   if (mont_is_inf_affine(P)) {
     mont_set_inf_affine(R);
-  } else if (fp2_IsEqual(&P->y, &t0)) {
+  } else if (fp2_Cmp(&P->y, &t0)) {
     /* P == -P */
     mont_set_inf_affine(R);
   } else {
@@ -458,10 +461,10 @@ void xADD(const mont_curve_int_t *curve, const mont_pt_t *P, const mont_pt_t *Q,
     mont_pt_copy(Q, R);
   } else if (mont_is_inf_affine(Q)) {
     mont_pt_copy(P, R);
-  } else if (fp2_IsEqual(&P->x, &Q->x) && fp2_IsEqual(&P->y, &Q->y)) {
+  } else if (fp2_Cmp(&P->x, &Q->x) && fp2_Cmp(&P->y, &Q->y)) {
     /* P == Q */
     xDBL(curve, P, R);
-  } else if (fp2_IsEqual(&P->x, &Q->x) && fp2_IsEqual(&P->y, &t0)) {
+  } else if (fp2_Cmp(&P->x, &Q->x) && fp2_Cmp(&P->y, &t0)) {
     /* P == -Q */
     mont_set_inf_affine(R);
   } else {
@@ -912,7 +915,7 @@ void get_yP_yQ_A_B(const sike_public_key_t *pk, mont_curve_int_t *curve) {
   xNEGATE(Q, &T);
   xADD(curve, P, &T, &T);
 
-  if (!fp2_IsEqual(&T.x, xR))
+  if (!fp2_Cmp(&T.x, xR))
     fp2_Negative(&Q->y, &Q->y);
 }
 
@@ -979,7 +982,7 @@ void sike_isogen_3(const sike_params_t *params, sike_public_key_t *pk,
 
 }
 
-void sike_isoex_2(const sike_params_t *params, const sike_public_key_t *pkO,
+void sike_isoex_2(const sike_public_key_t *pkO,
                   const sike_private_key_2 *sk2I, fp2 *secret) {
   mont_curve_int_t E = {0};
   
@@ -1000,7 +1003,7 @@ void sike_isoex_2(const sike_params_t *params, const sike_public_key_t *pkO,
   j_inv(&E, secret);
 }
 
-void sike_isoex_3(const sike_params_t *params, const sike_public_key_t *pkO,
+void sike_isoex_3(const sike_public_key_t *pkO,
                   const sike_private_key_3 *sk3I, fp2 *secret) {
   mont_curve_int_t E = {0};
 
@@ -1047,7 +1050,7 @@ void printPublicKey(const sike_public_key_t K) {
 
 void printOctetString(const uint8_t* os, size_t len) {
   printf("[");
-  int i;
+  size_t i;
   for(i = 0; i < len - 1; i++) {
     printf("0x%02x, ", os[i]);
   }
@@ -1062,7 +1065,7 @@ void gen3ex2(sike_private_key_2 *a, sike_private_key_3 *b, fp2 *c) {
   sike_setup_params(&sikeRawParams, &params);
   sike_public_key_t pkB = {0};
   sike_isogen_3(&params, &pkB, b);
-  sike_isoex_2(&params, &pkB, a, c);
+  sike_isoex_2(&pkB, a, c);
 }
 
 void gen2ex3(sike_private_key_2 *a, sike_private_key_3 *b, fp2 *c) {
@@ -1074,14 +1077,14 @@ void gen2ex3(sike_private_key_2 *a, sike_private_key_3 *b, fp2 *c) {
   pktoos(&pkA, pkos);
   printOctetString(pkos, 24);
   ostopk(pkos, &pkA);
-  sike_isoex_3(&params, &pkA, b, c);
+  sike_isoex_3(&pkA, b, c);
 }
 
 int secretShared(sike_private_key_2 *a, sike_private_key_2 *b) {
   fp2 c1 = {0}, c2 = {0};
   gen2ex3(a, b, &c1);
   gen3ex2(a, b, &c2);
-  return fp2_IsEqual(&c1, &c2);
+  return fp2_Cmp(&c1, &c2);
 }
 
 int main(int argc, char *argv[]) {
@@ -1106,5 +1109,5 @@ int main(int argc, char *argv[]) {
   fp2 d;
   gen3ex2(&skA, &skB, &d);
   printFP2(d);
-  return fp2_IsEqual(&c, &d);
+  return fp2_Cmp(&c, &d);
 }

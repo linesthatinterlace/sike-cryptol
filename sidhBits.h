@@ -127,7 +127,7 @@ int ostopk(const uint8_t *to_dec, sike_public_key_t* dec);
 
 void fp_Add(const fp *a, const fp *b, fp *c);
 
-int fp_IsEqual(const fp *a, const fp *b);
+int fp_Cmp(const fp *a, const fp *b);
 
 int fp_IsEven(const fp *a);
 
@@ -157,7 +157,7 @@ void fp_Copy(const fp *src, fp *dst); // NO EQUIV
 
 int fp_IsBitSet(const fp *a, const int i);  // NO EQUIV
 
-int fp_IsConstant(const fp *a, const size_t constant); // NO EQUIV
+int fp_IsConstant(const fp *a, const uint32_t constant); // NO EQUIV
 
 //
 // FP2
@@ -167,7 +167,7 @@ void fp2_Add(const fp2 *a, const fp2 *b, fp2 *c);
 
 void fp2_Doub(const fp2 *a, fp2 *b);
 
-int fp2_IsEqual(const fp2 *a1, const fp2 *a2);
+int fp2_Cmp(const fp2 *a1, const fp2 *a2);
 
 void fp2_Sub(const fp2 *a, const fp2 *b, fp2 *c);
 
@@ -264,10 +264,10 @@ void sike_isogen_2(const sike_params_t *params, sike_public_key_t *pk,
 void sike_isogen_3(const sike_params_t *params, sike_public_key_t *pk,
                    const sike_private_key_2 *sk2);
 
-void sike_isoex_2(const sike_params_t *params, const sike_public_key_t *pkO,
+void sike_isoex_2(const sike_public_key_t *pkO,
                   const sike_private_key_2 *sk2I, fp2 *secret);
 
-void sike_isoex_3(const sike_params_t *params, const sike_public_key_t *pkO,
+void sike_isoex_3(const sike_public_key_t *pkO,
                   const sike_private_key_3 *sk3I, fp2 *secret);
 
 //

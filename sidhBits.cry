@@ -149,47 +149,53 @@ fpCmp : Fp -> Fp -> Bit
 fpCmp a b = (a % modulus) == (b % modulus)
 
 fpIsEven : Fp -> Bit
-fpIsEven x = ~(x ! 0)
+fpIsEven x = ~(fpIsBitSet x 0)
 
-fpMultInv : Fp -> Fp
-fpMultInv a = fpPow a ( modulus - 2 )
+fpIsBitSet : Fp -> [32] -> Bit
+fpIsBitSet a b = a ! b
 
-fpMult : Fp -> Fp -> Fp
-fpMult a b = drop`{Np*8} <~ (a' * b') % modulus'
+fpInvert : Fp -> Fp
+fpInvert a = fpPow a ( modulus - 2 )
+
+fpMultiply : Fp -> Fp -> Fp
+fpMultiply a b = drop`{Np*8} <~ (a' * b') % modulus'
     where   a' = zext`{2*Np*8} a
             b' = zext`{2*Np*8} b
             modulus' = zext`{2*Np*8} modulus
 
-fpAddInv : Fp -> Fp
-fpAddInv a = if r == fpAddUnit then fpAddUnit else modulus - r
+fpNegative : Fp -> Fp
+fpNegative a = if r == fpZero then fpZero else modulus - r
     where   r  = (a % modulus)
 
 fpPow : Fp -> Fp -> Fp
 fpPow a n = bs ! 0
-    where   bs = [fpMultUnit] # [ if bit then fpMult a (fpSquare b) else fpSquare b | b <- bs | bit <- n ]
+    where   bs = [fpUnity] # [ if bit then fpMultiply a (fpSquare b) else fpSquare b | b <- bs | bit <- n ]
 
 fpQuadNonRes : Fp -> Bit
 fpQuadNonRes a = ~(fpCmp (fpSquare r) a)
     where r   = fpPow a ( modulus + 1 >> 2 )
 
 fpSquare : Fp -> Fp
-fpSquare a = fpMult a a
+fpSquare a = fpMultiply a a
                 
 fpSqrt : Fp -> Fp
 fpSqrt a =  if ~(fpCmp (fpSquare r) a) then error "Not a quadratic residue in Fp!"
             else    if fpIsEven r
                     then r
-                    else fpAddInv r
+                    else fpNegative r
             where   r   = fpPow a ( modulus + 1 >> 2 )
 
-fpSubt : Fp -> Fp -> Fp
-fpSubt a b = fpAdd a (fpAddInv b)
+fpSubtract : Fp -> Fp -> Fp
+fpSubtract a b = fpAdd a (fpNegative b)
 
-fpMultUnit : Fp
-fpMultUnit = zero # 0b1
+fpUnity : Fp
+fpUnity = zero # 0b1
 
-fpAddUnit : Fp
-fpAddUnit = zero
+fpZero : Fp
+fpZero = zero
+
+fpConstant : [32] -> Fp
+fpConstant x = x % modulus
     
 
 //
@@ -205,44 +211,44 @@ fp2Doub a = fp2Add a a
 fp2Cmp : Fp2 -> Fp2 -> Bit
 fp2Cmp a b = fpCmp a.x0 b.x0 /\ fpCmp a.x1 b.x1
 
-fp2Subt : Fp2 -> Fp2 -> Fp2
-fp2Subt a b = fp2Add a (fp2AddInv b)
+fp2Subtract : Fp2 -> Fp2 -> Fp2
+fp2Subtract a b = fp2Add a (fp2Negative b)
 
-fp2Mult : Fp2 -> Fp2 -> Fp2
-fp2Mult a b = mkFP2 (fpSubt (fpMult a.x0 b.x0) (fpMult a.x1 b.x1)) (fpAdd (fpMult a.x0 b.x1) (fpMult a.x1 b.x0))
+fp2Multiply : Fp2 -> Fp2 -> Fp2
+fp2Multiply a b = mkFP2 (fpSubtract (fpMultiply a.x0 b.x0) (fpMultiply a.x1 b.x1)) (fpAdd (fpMultiply a.x0 b.x1) (fpMultiply a.x1 b.x0))
 
 fp2Square : Fp2 -> Fp2
-fp2Square a = fp2Mult a a
+fp2Square a = fp2Multiply a a
 
-fp2MultInv : Fp2 -> Fp2
-fp2MultInv a =  mkFP2 t0 t1
-    where   norm = fpAdd (fpMult a.x0 a.x0) (fpMult a.x1 a.x1)
-            normInv = fpMultInv norm
-            t0 = fpMult a.x0 normInv
-            t1 = fpMult (fpAddInv a.x1) normInv
+fp2Invert : Fp2 -> Fp2
+fp2Invert a =  mkFP2 t0 t1
+    where   norm = fpAdd (fpMultiply a.x0 a.x0) (fpMultiply a.x1 a.x1)
+            normInv = fpInvert norm
+            t0 = fpMultiply a.x0 normInv
+            t1 = fpMultiply (fpNegative a.x1) normInv
 
-fp2AddInv : Fp2 -> Fp2
-fp2AddInv a = mkFP2 (fpAddInv a.x0) (fpAddInv a.x1)
+fp2Negative : Fp2 -> Fp2
+fp2Negative a = mkFP2 (fpNegative a.x0) (fpNegative a.x1)
 
 fp2Sqrt : Fp2 -> Fp2
-fp2Sqrt a = if      fpCmp a.x1 fpAddUnit
+fp2Sqrt a = if      fpCmp a.x1 fpZero
             then    if      fpQuadNonRes a.x0
-                    then    mkFP2 (fpAddUnit) (fpSqrt (fpAddInv a.x0))
-                    else    mkFP2 (fpSqrt a.x0) (fpAddUnit)
+                    then    mkFP2 (fpZero) (fpSqrt (fpNegative a.x0))
+                    else    mkFP2 (fpSqrt a.x0) (fpZero)
             else    if      (fpIsEven t.x0)
-                    then    fp2AddInv t
+                    then    fp2Negative t
                     else    t
             where   t               =   if fpQuadNonRes z
-                                        then mkFP2 beta' (fpAddInv alpha')
+                                        then mkFP2 beta' (fpNegative alpha')
                                         else mkFP2 alpha' beta'
-                    inv2            =   fpMultInv 2
-                    fp2Norm         =   fpAdd (fpMult a.x0 a.x0) (fpMult a.x1 a.x1)
-                    z               =   fpMult (fpAdd a.x0 ( fpSqrt fp2Norm ) ) inv2
+                    inv2            =   fpInvert 2
+                    fp2Norm         =   fpAdd (fpMultiply a.x0 a.x0) (fpMultiply a.x1 a.x1)
+                    z               =   fpMultiply (fpAdd a.x0 ( fpSqrt fp2Norm ) ) inv2
                     alpha'          =   fpPow z ( modulus + 1 >> 2 )
-                    beta'           =   fpMult (fpMult a.x1 (fpPow z ( modulus - 3 >> 2 )) ) inv2
+                    beta'           =   fpMultiply (fpMultiply a.x1 (fpPow z ( modulus - 3 >> 2 )) ) inv2
 
-fp2MultUnit : Fp2
-fp2MultUnit = mkFP2 fpMultUnit fpAddUnit
+fp2Unity : Fp2
+fp2Unity = mkFP2 fpUnity fpZero
 
 
 ///
@@ -267,36 +273,36 @@ isInfinite P = (fp2Cmp P.x pointAtInfinity.x) /\ (fp2Cmp P.y pointAtInfinity.y)
 xDBL : MontgomeryCurve -> EllipticPoint -> EllipticPoint
 xDBL C P =  if isInfinite P
             then pointAtInfinity
-            |  fp2Cmp P.y (mkFP2 fpAddUnit fpAddUnit)
+            |  fp2Cmp P.y (mkFP2 fpZero fpZero)
             then pointAtInfinity
             else mkPoint x2P y2P
                 where   xP  = P.x
                         yP  = P.y
                         t3  = fp2Square xP
                         t4  = fp2Doub t3
-                        t5  = fp2MultUnit
+                        t5  = fp2Unity
                         t6  = fp2Add t3 t4
-                        t7  = fp2Mult C.A xP
+                        t7  = fp2Multiply C.A xP
                         t8  = fp2Doub t7
                         t9  = fp2Add t6 t8
                         t10 = fp2Add t9 t5
-                        t11 = fp2Mult C.B yP
+                        t11 = fp2Multiply C.B yP
                         t12 = fp2Doub t11
-                        t13 = fp2MultInv t12
-                        t14 = fp2Mult t10 t13
+                        t13 = fp2Invert t12
+                        t14 = fp2Multiply t10 t13
                         t15 = fp2Square t14
-                        t16 = fp2Mult C.B t15
-                        t17 = fp2Subt t16 C.A
-                        t18 = fp2Subt t17 xP
-                        t19 = fp2Subt t18 xP
-                        t20 = fp2Mult t14 t15
-                        t21 = fp2Mult C.B t20
+                        t16 = fp2Multiply C.B t15
+                        t17 = fp2Subtract t16 C.A
+                        t18 = fp2Subtract t17 xP
+                        t19 = fp2Subtract t18 xP
+                        t20 = fp2Multiply t14 t15
+                        t21 = fp2Multiply C.B t20
                         t22 = fp2Add t21 yP
                         t23 = fp2Doub xP
                         t24 = fp2Add t23 xP
                         t25 = fp2Add t24 C.A
-                        t26 = fp2Mult t25 t14
-                        t27 = fp2Subt t26 t22
+                        t26 = fp2Multiply t25 t14
+                        t27 = fp2Subtract t26 t22
                         x2P = t19
                         y2P = t27
 
@@ -314,30 +320,30 @@ xADD C P Q =    if isInfinite P
                 then P
                 | (fp2Cmp P.x Q.x) /\ (fp2Cmp P.y Q.y)
                 then xDBL C P
-                | (fp2Cmp P.x Q.x) /\ (fp2Cmp P.y (fp2AddInv Q.y))
+                | (fp2Cmp P.x Q.x) /\ (fp2Cmp P.y (fp2Negative Q.y))
                 then pointAtInfinity
                 else mkPoint xPQ yPQ
                     where   xP  = P.x
                             yP  = P.y
                             xQ  = Q.x
                             yQ  = Q.y
-                            t9  = fp2Subt yQ yP
-                            t10 = fp2Subt xQ xP
-                            t11 = fp2MultInv t10
-                            t12 = fp2Mult t9 t11
+                            t9  = fp2Subtract yQ yP
+                            t10 = fp2Subtract xQ xP
+                            t11 = fp2Invert t10
+                            t12 = fp2Multiply t9 t11
                             t13 = fp2Square t12
                             t14 = fp2Doub xP
                             t15 = fp2Add t14 xQ
                             t16 = fp2Add t15 C.A
-                            t17 = fp2Mult t16 t12
-                            t18 = fp2Mult t12 t13
-                            t19 = fp2Mult C.B t18
+                            t17 = fp2Multiply t16 t12
+                            t18 = fp2Multiply t12 t13
+                            t19 = fp2Multiply C.B t18
                             t20 = fp2Add t19 yP
-                            t21 = fp2Subt t17 t20
-                            t22 = fp2Mult C.B t13
-                            t23 = fp2Subt t22 C.A
-                            t24 = fp2Subt t23 xP
-                            t25 = fp2Subt t24 xQ
+                            t21 = fp2Subtract t17 t20
+                            t22 = fp2Multiply C.B t13
+                            t23 = fp2Subtract t22 C.A
+                            t24 = fp2Subtract t23 xP
+                            t25 = fp2Subtract t24 xQ
                             xPQ = t25
                             yPQ = t21
 
@@ -353,7 +359,7 @@ xTPLe e C P  = ys @ e
                 where ys = iterate (xTPL C) P
 
 xNEGATE : EllipticPoint -> EllipticPoint
-xNEGATE P = {P | y = fp2AddInv P.y }
+xNEGATE P = {P | y = fp2Negative P.y }
 
 
 // Algorithm 30
@@ -366,10 +372,10 @@ double_and_add C P k = bs ! 0
 j_inv : MontgomeryCurve ->  Fp2
 j_inv C = j
     where   t1  = fp2Square C.A
-            t2  = fp2Add (fp2Doub fp2MultUnit) fp2MultUnit
-            t3  = fp2Subt t1 t2
+            t2  = fp2Add (fp2Doub fp2Unity) fp2Unity
+            t3  = fp2Subtract t1 t2
             t4  = fp2Square t3
-            t5  = fp2Mult t3 t4
+            t5  = fp2Multiply t3 t4
             t6  = fp2Doub t5
             t7  = fp2Doub t6
             t8  = fp2Doub t7
@@ -378,10 +384,10 @@ j_inv C = j
             t11 = fp2Doub t10
             t12 = fp2Doub t11
             t13 = fp2Doub t12
-            t14 = fp2Doub ~~> fp2Doub <~ fp2MultUnit
-            t15 = fp2Subt t1 t14
-            t16 = fp2MultInv t15
-            t17 = fp2Mult t13 t16
+            t14 = fp2Doub ~~> fp2Doub <~ fp2Unity
+            t15 = fp2Subtract t1 t14
+            t16 = fp2Invert t15
+            t17 = fp2Multiply t13 t16
             j   = t17
 
 //
@@ -393,9 +399,9 @@ curve_2_iso : EllipticPoint -> MontgomeryCurve -> MontgomeryCurve
 curve_2_iso T C = {C | A = a, B = b}
     where   t1  = fp2Square T.x
             t2  = fp2Doub t1
-            t3  = fp2Subt fp2MultUnit t2
+            t3  = fp2Subtract fp2Unity t2
             t4  = fp2Doub t3
-            t5  = fp2Mult T.x C.B
+            t5  = fp2Multiply T.x C.B
             a  = t4
             b  = t5
                             
@@ -407,19 +413,19 @@ curve_2_iso T C = {C | A = a, B = b}
 eval_2_iso : EllipticPoint -> EllipticPoint -> EllipticPoint
 eval_2_iso T Q = Q'
     where   (xQ, yQ) = (Q.x, Q.y)
-            t1  = fp2Mult xQ T.x
-            t2  = fp2Mult xQ t1
-            t3  = fp2Mult t1 T.x
+            t1  = fp2Multiply xQ T.x
+            t2  = fp2Multiply xQ t1
+            t3  = fp2Multiply t1 T.x
             t4  = fp2Doub t3
-            t5  = fp2Subt t2 t4
+            t5  = fp2Subtract t2 t4
             t6  = fp2Add t5 T.x
-            t7  = fp2Mult yQ t6
-            t8  = fp2Subt t2 xQ
-            t9  = fp2Subt xQ T.x
-            t10 = fp2MultInv t9
-            t11 = fp2Mult t8 t10
+            t7  = fp2Multiply yQ t6
+            t8  = fp2Subtract t2 xQ
+            t9  = fp2Subtract xQ T.x
+            t10 = fp2Invert t9
+            t11 = fp2Multiply t8 t10
             t12 = fp2Square t10
-            t13 = fp2Mult t7 t12
+            t13 = fp2Multiply t7 t12
             xQ' = t11
             yQ' = t13
             Q'  = mkPoint xQ' yQ'
@@ -435,13 +441,13 @@ curve_4_iso T C = {C | A = a, B = b}
             t3  = fp2Doub t2
             t4  = fp2Doub t3
             t5  = mkFP2 2 0
-            t6  = fp2Subt t4 t5
-            t7  = fp2Mult T.x t1
+            t6  = fp2Subtract t4 t5
+            t7  = fp2Multiply T.x t1
             t8  = fp2Add t7 T.x
-            t9  = fp2Mult t8 C.B
-            t10 = fp2MultInv t5
-            t11 = fp2AddInv t10
-            t12 = fp2Mult t11 t9
+            t9  = fp2Multiply t8 C.B
+            t10 = fp2Invert t5
+            t11 = fp2Negative t10
+            t12 = fp2Multiply t11 t9
             a  = t6
             b  = t12
 
@@ -455,63 +461,63 @@ eval_4_iso T Q = Q'
             t1  = fp2Square xQ
             t2  = fp2Square t1
             t3  = fp2Square T.x
-            t4  = fp2Mult t2 t3
+            t4  = fp2Multiply t2 t3
             t5  = fp2Add t2 t4
-            t6  = fp2Mult t1 t3
+            t6  = fp2Multiply t1 t3
             t7  = fp2Doub t6
             t8  = fp2Doub t7
             t9  = fp2Doub t8
             t10 = fp2Add t7 t9
             t11 = fp2Add t5 t10
             t12 = fp2Square t3
-            t13 = fp2Mult t1 t12
+            t13 = fp2Multiply t1 t12
             t14 = fp2Doub t13
             t15 = fp2Add t11 t14
-            t16 = fp2Mult t1 xQ
-            t17 = fp2Mult T.x t3
-            t18 = fp2Mult t16 t17
+            t16 = fp2Multiply t1 xQ
+            t17 = fp2Multiply T.x t3
+            t18 = fp2Multiply t16 t17
             t19 = fp2Doub t18
             t20 = fp2Doub t19
-            t21 = fp2Subt t15 t20
-            t22 = fp2Mult t16 T.x 
+            t21 = fp2Subtract t15 t20
+            t22 = fp2Multiply t16 T.x 
             t23 = fp2Doub t22
             t24 = fp2Doub t23
-            t25 = fp2Subt t21 t24
-            t26 = fp2Mult xQ t17
+            t25 = fp2Subtract t21 t24
+            t26 = fp2Multiply xQ t17
             t27 = fp2Doub t26
             t28 = fp2Doub t27
-            t29 = fp2Subt t25 t28
+            t29 = fp2Subtract t25 t28
             t30 = fp2Add t29 t3
-            t31 = fp2Add t30 fp2MultUnit
-            t32 = fp2Mult xQ T.x
-            t33 = fp2Subt t32 fp2MultUnit
+            t31 = fp2Add t30 fp2Unity
+            t32 = fp2Multiply xQ T.x
+            t33 = fp2Subtract t32 fp2Unity
             t34 = fp2Doub t32
             t35 = fp2Doub t34
-            t36 = fp2Subt t31 t35
-            t37 = fp2Mult t33 t36
-            t38 = fp2Mult t3 t37
-            t39 = fp2Mult yQ t38
+            t36 = fp2Subtract t31 t35
+            t37 = fp2Multiply t33 t36
+            t38 = fp2Multiply t3 t37
+            t39 = fp2Multiply yQ t38
             t40 = fp2Doub t39
-            t41 = fp2AddInv t40
-            t42 = fp2Subt t34 t3
-            t43 = fp2Subt t42 fp2MultUnit
-            t44 = fp2Subt xQ T.x
-            t45 = fp2Mult t44 t43
+            t41 = fp2Negative t40
+            t42 = fp2Subtract t34 t3
+            t43 = fp2Subtract t42 fp2Unity
+            t44 = fp2Subtract xQ T.x
+            t45 = fp2Multiply t44 t43
             t46 = fp2Square t45
-            t47 = fp2Mult t46 t44
-            t48 = fp2MultInv t47
-            t49 = fp2Mult t41 t48
-            t50 = fp2Mult t45 t44
-            t51 = fp2MultInv t50
+            t47 = fp2Multiply t46 t44
+            t48 = fp2Invert t47
+            t49 = fp2Multiply t41 t48
+            t50 = fp2Multiply t45 t44
+            t51 = fp2Invert t50
             t52 = fp2Square t33
-            t53 = fp2Mult t51 t52
-            t54 = fp2Mult xQ t53
-            t55 = fp2Mult xQ t3
+            t53 = fp2Multiply t51 t52
+            t54 = fp2Multiply xQ t53
+            t55 = fp2Multiply xQ t3
             t56 = fp2Add t55 xQ
             t57 = fp2Doub T.x
-            t58 = fp2Subt t56 t57
-            t59 = fp2AddInv t58
-            t60 = fp2Mult t54 t59
+            t58 = fp2Subtract t56 t57
+            t59 = fp2Negative t58
+            t60 = fp2Multiply t54 t59
             xQ' = t60
             yQ' = t49
             Q'  = mkPoint xQ' yQ'
@@ -523,15 +529,15 @@ eval_4_iso T Q = Q'
 curve_3_iso : EllipticPoint -> MontgomeryCurve -> MontgomeryCurve
 curve_3_iso T C = {C | A = a, B = b}
     where   t1  = fp2Square T.x
-            t2  = fp2Mult C.B t1
+            t2  = fp2Multiply C.B t1
             t3  = fp2Doub t1
             t4  = fp2Doub t3
             t5  = fp2Add t3 t4
-            t6  = fp2Doub <~ fp2Add (fp2Doub fp2MultUnit) fp2MultUnit
-            t7  = fp2Subt t5 t6
-            t8  = fp2Mult C.A T.x
-            t9  = fp2Subt t8 t7
-            t10 = fp2Mult t9 T.x
+            t6  = fp2Doub <~ fp2Add (fp2Doub fp2Unity) fp2Unity
+            t7  = fp2Subtract t5 t6
+            t8  = fp2Multiply C.A T.x
+            t9  = fp2Subtract t8 t7
+            t10 = fp2Multiply t9 T.x
             a  = t10
             b  = t2
 
@@ -544,26 +550,26 @@ eval_3_iso T Q = Q'
     where   x3  = T.x
             (xQ, yQ) = (Q.x, Q.y)
             t1  = fp2Square xQ
-            t2  = fp2Mult t1 T.x
+            t2  = fp2Multiply t1 T.x
             t3  = fp2Square T.x
-            t4  = fp2Mult xQ t3
+            t4  = fp2Multiply xQ t3
             t5  = fp2Doub t4
             t6  = fp2Add t4 t5
-            t7  = fp2Subt t2 t6
+            t7  = fp2Subtract t2 t6
             t8  = fp2Add t7 xQ
             t9  = fp2Add t8 T.x
-            t10 = fp2Subt xQ T.x
-            t11 = fp2MultInv t10
+            t10 = fp2Subtract xQ T.x
+            t11 = fp2Invert t10
             t12 = fp2Square t11
-            t13 = fp2Mult t11 t12
-            t14 = fp2Mult xQ T.x
-            t15 = fp2Subt t14 fp2MultUnit
-            t16 = fp2Mult t15 t9
-            t17 = fp2Mult t16 t13
+            t13 = fp2Multiply t11 t12
+            t14 = fp2Multiply xQ T.x
+            t15 = fp2Subtract t14 fp2Unity
+            t16 = fp2Multiply t15 t9
+            t17 = fp2Multiply t16 t13
             t18 = fp2Square t15
-            t19 = fp2Mult t18 t12
-            t20 = fp2Mult xQ t19
-            t21 = fp2Mult yQ t17
+            t19 = fp2Multiply t18 t12
+            t20 = fp2Multiply xQ t19
+            t21 = fp2Multiply yQ t17
             xQ' = t20
             yQ' = t21
             Q'  = mkPoint xQ' yQ'
@@ -623,18 +629,18 @@ iso_3_e_step k y = {S = S', C = C''}
 get_A : PublicKey -> Fp2
 get_A pk = A
     where   t1  = fp2Add pk.xP pk.xQ
-            t2  = fp2Mult pk.xP pk.xQ
-            t3  = fp2Mult pk.xR t1
+            t2  = fp2Multiply pk.xP pk.xQ
+            t3  = fp2Multiply pk.xR t1
             t4  = fp2Add t3 t2
-            t5  = fp2Mult t2 pk.xR
-            t6  = fp2Subt t4 fp2MultUnit
+            t5  = fp2Multiply t2 pk.xR
+            t6  = fp2Subtract t4 fp2Unity
             t7  = fp2Doub t5
             t8  = fp2Add t1 pk.xR
             t9  = fp2Doub t7
             t10 = fp2Square t6
-            t11 = fp2MultInv t9
-            t12 = fp2Mult t10 t11
-            t13 = fp2Subt t12 t8
+            t11 = fp2Invert t9
+            t12 = fp2Multiply t10 t11
+            t13 = fp2Subtract t12 t8
             A   = t13
 
 // Algorithm 40
@@ -646,16 +652,16 @@ get_xR C = mkPublicKey C.P.x C.Q.x R.x
 get_yP_yQ_A_B : PublicKey -> MontgomeryCurve
 get_yP_yQ_A_B pk = C'
     where   t1  = get_A pk
-            t2  = fp2MultUnit
+            t2  = fp2Unity
             t3  = fp2Square pk.xP
-            t4  = fp2Mult pk.xP t3
-            t5  = fp2Mult t1 t3
+            t4  = fp2Multiply pk.xP t3
+            t5  = fp2Multiply t1 t3
             t6  = fp2Add t4 t5
             t7  = fp2Add t6 pk.xP
             t8  = fp2Sqrt t7
             t9  = fp2Square pk.xQ
-            t10 = fp2Mult pk.xQ t9
-            t11 = fp2Mult t1 t9
+            t10 = fp2Multiply pk.xQ t9
+            t11 = fp2Multiply t1 t9
             t12 = fp2Add t10 t11
             t13 = fp2Add t12 pk.xQ
             t14 = fp2Sqrt t13        
@@ -691,8 +697,8 @@ isogen_3 params sk3 = pk3
             pk3     = get_xR C'
 
 // Algorithm 44
-isoex_2 : SikeParams -> PublicKey -> SecretKeyTwo -> Fp2
-isoex_2 params pk3 sk2 = j2
+isoex_2 : PublicKey -> SecretKeyTwo -> Fp2
+isoex_2 pk3 sk2 = j2
     where   C   = get_yP_yQ_A_B pk3
             S   = xADD C C.P (double_and_add`{msbA} C C.Q sk2)
             C'  = { C | P = pointAtInfinity, Q = pointAtInfinity }
@@ -701,8 +707,8 @@ isoex_2 params pk3 sk2 = j2
 
 
 // Algorithm 45
-isoex_3 : SikeParams -> PublicKey -> SecretKeyThree -> Fp2
-isoex_3 params pk2 sk3 = j3
+isoex_3 : PublicKey -> SecretKeyThree -> Fp2
+isoex_3 pk2 sk3 = j3
     where   C   = get_yP_yQ_A_B pk2
             S   = xADD C C.P (double_and_add`{msbB} C C.Q sk3)
             C'  = { C | P = pointAtInfinity, Q = pointAtInfinity }
@@ -712,11 +718,11 @@ isoex_3 params pk2 sk3 = j3
 // TESTS
 
 gen3ex2 : SecretKeyTwo -> SecretKeyThree -> Fp2
-gen3ex2 sk2 sk3 = isoex_2 params (isogen_3 params sk3) sk2
+gen3ex2 sk2 sk3 = isoex_2 (isogen_3 params sk3) sk2
     where params = mkSikeParams paramSet
 
 gen2ex3 : SecretKeyTwo -> SecretKeyThree -> Fp2
-gen2ex3 sk2 sk3 = isoex_3 params (isogen_2 params sk2) sk3
+gen2ex3 sk2 sk3 = isoex_3 (isogen_2 params sk2) sk3
     where params = mkSikeParams paramSet
 
 property secretShared a b = gen3ex2 a b == gen2ex3 a b
