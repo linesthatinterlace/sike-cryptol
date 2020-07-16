@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
-// Constants.
+
+// PARAMETER CONSTANTS
 
 #define MODULUS 0x0cd07fff
 #define PARE2 15
@@ -94,10 +95,10 @@ typedef struct {
 } sike_params_t;
 
 //
-// PARAMS
+// PARAMETER SETUP
 //
 
-void sike_setup_params(const sike_params_raw_t *raw, sike_params_t *params);
+sike_params_t sike_setup_params(const sike_params_raw_t raw);
 
 extern const sike_params_raw_t sikeRawParams;
 
@@ -105,179 +106,158 @@ extern const sike_params_raw_t sikeRawParams;
 // ENCODING
 //
 
-void itoos (const uint32_t * to_enc, uint8_t* enc);
+void itoos (const uint32_t * to_enc, uint8_t * enc);
 
-void ostoi (const uint8_t* to_dec, uint32_t *dec, size_t len);
+void ostoi (const uint8_t* to_dec, uint32_t * dec, size_t len);
 
 void fptoos (const fp * to_enc, uint8_t * enc);
 
 int ostofp (const uint8_t *to_dec, fp * dec);
 
-void fp2toos(const fp2* to_enc, uint8_t * enc);
+void fp2toos(const fp2 * to_enc, uint8_t * enc);
 
-int ostofp2(const uint8_t *to_dec, fp2* dec);
+int ostofp2(const uint8_t *to_dec, fp2 * dec);
 
-void pktoos(const sike_public_key_t* to_enc, uint8_t * enc);
+void pktoos(const sike_public_key_t * to_enc, uint8_t * enc);
 
-int ostopk(const uint8_t *to_dec, sike_public_key_t* dec);
+int ostopk(const uint8_t *to_dec, sike_public_key_t * dec);
 
 //
 // FP
 //
 
-void fp_Add(const fp *a, const fp *b, fp *c);
+fp fp_Add(const fp a, const fp b);
 
-int fp_Cmp(const fp *a, const fp *b);
+int fp_Cmp(const fp a, const fp b);
 
-int fp_IsEven(const fp *a);
+int fp_IsEven(const fp a);
 
-void fp_Invert(const fp *a, fp *b);
+fp fp_Invert(const fp a);
 
-void fp_Multiply(const fp *a, const fp *b, fp *c);
+fp fp_Multiply(const fp a, const fp b);
 
-void fp_Negative(const fp *a, fp *b);
+fp fp_Negative(const fp a);
 
-void fp_Pow(const fp *a, const fp *b, fp *c);
+fp fp_Pow(const fp a, const fp b);
 
-int fp_QuadNonRes(const fp *a);
+int fp_QuadNonRes(const fp a);
 
-void fp_Square(const fp *a, fp *b);
+fp fp_Square(const fp a);
 
-void fp_Sqrt(const fp *a, fp *b);
+fp fp_Sqrt(const fp a);
 
-void fp_Subtract(const fp *a, const fp *b, fp *c);
+fp fp_Subtract(const fp a, const fp b);
 
-void fp_Unity(fp *b);
+fp fp_Unity();
 
-void fp_Zero(fp *a);
+fp fp_Zero();
 
-void fp_Constant(uint32_t a, fp *b); // NO EQUIV
+fp fp_Constant(uint32_t a); // NO EQUIV
 
-void fp_Copy(const fp *src, fp *dst); // NO EQUIV
+int fp_IsBitSet(const fp a, const int i);
 
-int fp_IsBitSet(const fp *a, const int i);  // NO EQUIV
-
-int fp_IsConstant(const fp *a, const uint32_t constant); // NO EQUIV
+int fp_IsConstant(const fp a, const uint32_t constant);
 
 //
 // FP2
 //
 
-void fp2_Add(const fp2 *a, const fp2 *b, fp2 *c);
+fp2 fp2_Add(const fp2 a, const fp2 b);
 
-void fp2_Doub(const fp2 *a, fp2 *b);
+fp2 fp2_Double(const fp2 a);
 
-int fp2_Cmp(const fp2 *a1, const fp2 *a2);
+int fp2_Cmp(const fp2 a1, const fp2 a2);
 
-void fp2_Sub(const fp2 *a, const fp2 *b, fp2 *c);
+fp2 fp2_Subtract(const fp2 a, const fp2 b);
 
-void fp2_Multiply(const fp2 *a, const fp2 *b, fp2 *c);
+fp2 fp2_Multiply(const fp2 a, const fp2 b);
 
-void fp2_Square(const fp2 *a, fp2 *b);
+fp2 fp2_Square(const fp2 a);
 
-void fp2_Invert(const fp2 *a, fp2 *b);
+fp2 fp2_Invert(const fp2 a);
 
-void fp2_Negative(const fp2 *a, fp2 *b);
+fp2 fp2_Negative(const fp2 a);
 
-void fp2_Sqrt(const fp2 *a, fp2 *b);
+fp2 fp2_Sqrt(const fp2 a);
 
-void fp2_Unity(fp2 *b);
+fp2 fp2_Unity();
 
-void fp2_Copy(const fp2 *a, fp2 *b); // NO EQUIV
+fp2 fp2_Zero();
 
-int fp2_IsConst(const fp2 *a, uint32_t x0, uint32_t x1); // NO EQUIV
+int fp2_IsConst(const fp2 a, uint32_t x0, uint32_t x1); // NO EQUIV
 
-void fp2_Set(fp2 *fp2, uint32_t x0, uint32_t x1); // NO EQUIV
+fp2 mkFP2(uint32_t x0, uint32_t x1);
 
 //
 // MONTGOMERY
 //
 
-void mont_double_and_add(const mont_curve_int_t *curve, const fp *k,
-                         const mont_pt_t *P, mont_pt_t *Q, uint16_t msb);
+mont_pt_t mont_double_and_add(const mont_curve_int_t curve, const fp k, const mont_pt_t P, uint16_t msb);
                          
-void mont_set_inf_affine(mont_pt_t *P);
+mont_pt_t mont_inf_affine();
 
-int mont_is_inf_affine(const mont_pt_t *P);
+int mont_is_inf_affine(const mont_pt_t P);
 
-void xDBL(const mont_curve_int_t *curve, const mont_pt_t *P, mont_pt_t *R);
+mont_pt_t xDBL(const mont_curve_int_t curve, const mont_pt_t P);
 
-void xDBLe(const mont_curve_int_t *curve, const mont_pt_t *P, int e,
-           mont_pt_t *R);
+mont_pt_t xDBLe(const mont_curve_int_t curve, const mont_pt_t P, int e);
 
-void xADD(const mont_curve_int_t *curve, const mont_pt_t *P, const mont_pt_t *Q,
-          mont_pt_t *R);
+mont_pt_t xADD(const mont_curve_int_t curve, const mont_pt_t P, const mont_pt_t Q);
 
-void xTPL(const mont_curve_int_t *curve, const mont_pt_t *P, mont_pt_t *R);
+mont_pt_t xTPL(const mont_curve_int_t curve, const mont_pt_t P);
 
-void xTPLe(const mont_curve_int_t *curve, const mont_pt_t *P, int e,
-           mont_pt_t *R);
+mont_pt_t xTPLe(const mont_curve_int_t curve, const mont_pt_t P, int e);
 
-void xNEGATE(const mont_pt_t *P, mont_pt_t *R) ;
+mont_pt_t xNEGATE(const mont_pt_t P);
 
-void j_inv(const mont_curve_int_t *E, fp2 *jinv);
+fp2 j_inv(const mont_curve_int_t E);
 
-void mont_curve_copy(const mont_curve_int_t *curve,
-                     mont_curve_int_t *curvecopy); // NO EQUIV
+mont_pt_t mkPoint(const fp2 x, const fp2 y); 
 
-void mont_pt_copy(const mont_pt_t *src, mont_pt_t *dst); // NO EQUIV
-
+mont_curve_int_t mkMC(const fp2 a, const fp2 b, const mont_pt_t P, const mont_pt_t Q); 
 
 
 // ISOGENIES
 
-void curve_2_iso(const mont_pt_t *P2, const mont_curve_int_t *E,
-                 mont_curve_int_t *isoE);
+mont_curve_int_t curve_2_iso(const mont_pt_t P2, const mont_curve_int_t E);
                  
-void eval_2_iso(const mont_pt_t *P2, const mont_pt_t *P, mont_pt_t *isoP);
+mont_pt_t eval_2_iso(const mont_pt_t P2, const mont_pt_t P);
 
-void curve_4_iso(const mont_pt_t *P4, const mont_curve_int_t *E,
-                 mont_curve_int_t *isoE);
-void curve_4_iso(const mont_pt_t *P4, const mont_curve_int_t *E,
-                 mont_curve_int_t *isoE);
+mont_curve_int_t curve_4_iso(const mont_pt_t P4, const mont_curve_int_t E);
 
-void curve_3_iso(const mont_pt_t *P3, const mont_curve_int_t *E,
-                 mont_curve_int_t *isoE);
+mont_curve_int_t curve_3_iso(const mont_pt_t P3, const mont_curve_int_t E);
 
-void eval_3_iso(const mont_pt_t *P3, const mont_pt_t *P, mont_pt_t *isoP);
+mont_pt_t eval_3_iso(const mont_pt_t P3, const mont_pt_t P);
 
-void eval_4_iso(const mont_pt_t *P4, const mont_pt_t *P, mont_pt_t *isoP);
+mont_pt_t eval_4_iso(const mont_pt_t P4, const mont_pt_t P);
 
-void iso_2_e(int e, const mont_curve_int_t *E, mont_pt_t *S,
-             const mont_pt_t *P1, const mont_pt_t *P2, mont_curve_int_t *isoE,
-             mont_pt_t *isoP1, mont_pt_t *isoP2);
+mont_curve_int_t iso_2_e(int e, const mont_curve_int_t E, mont_pt_t S);
 
-void iso_3_e(int e, const mont_curve_int_t *E, mont_pt_t *S,
-             const mont_pt_t *P1, const mont_pt_t *P2, mont_curve_int_t *isoE,
-             mont_pt_t *isoP1, mont_pt_t *isoP2);
+mont_curve_int_t iso_3_e(int e, const mont_curve_int_t E, mont_pt_t S);
 
-void get_xR(const mont_curve_int_t *curve, sike_public_key_t *pk);
+sike_public_key_t get_xR(const mont_curve_int_t curve);
 
-void get_yP_yQ_A_B(const sike_public_key_t *pk, mont_curve_int_t *curve);
+mont_curve_int_t get_yP_yQ_A_B(const sike_public_key_t pk);
 
 // SIDH
 
 
-void sike_isogen_2(const sike_params_t *params, sike_public_key_t *pk,
-                   const sike_private_key_2 *sk2);
+sike_public_key_t sike_isogen_2(const sike_params_t params, const sike_private_key_2 sk2);
 
-void sike_isogen_3(const sike_params_t *params, sike_public_key_t *pk,
-                   const sike_private_key_2 *sk2);
+sike_public_key_t sike_isogen_3(const sike_params_t params, const sike_private_key_3 sk3);
 
-void sike_isoex_2(const sike_public_key_t *pkO,
-                  const sike_private_key_2 *sk2I, fp2 *secret);
+fp2 sike_isoex_2(const sike_public_key_t pkO, const sike_private_key_2 sk2I);
 
-void sike_isoex_3(const sike_public_key_t *pkO,
-                  const sike_private_key_3 *sk3I, fp2 *secret);
+fp2 sike_isoex_3(const sike_public_key_t pkO, const sike_private_key_3 sk3I);
 
 //
 // CHECKS
 //
-void gen3ex2(sike_private_key_2 *a, sike_private_key_3 *b, fp2 *c);
+fp2 gen3ex2(sike_private_key_2 a, sike_private_key_3 b);
 
-void gen2ex3(sike_private_key_2 *a, sike_private_key_3 *b, fp2 *c);
+fp2 gen2ex3(sike_private_key_2 a, sike_private_key_3 b);
 
-int secretShared(sike_private_key_2 *a, sike_private_key_2 *b);
+int secretShared(sike_private_key_2 a, sike_private_key_2 b);
 
 // PRINTING
 void printFP2(const fp2 z);
