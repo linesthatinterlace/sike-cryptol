@@ -98,95 +98,91 @@ typedef struct {
 // PARAMETER SETUP
 //
 
-sike_params_t sike_setup_params(const sike_params_raw_t raw);
+sike_params_t sike_setup_params_C(const sike_params_raw_t raw);
 
-extern const sike_params_raw_t sikeRawParams;
+sike_params_raw_t sikeRawParams_C();
 
 //
 // ENCODING
 //
 
-void itoos (const uint32_t * to_enc, uint8_t * enc);
+void itoos_C (const uint32_t * to_enc, uint8_t * enc);
 
-void ostoi (const uint8_t* to_dec, uint32_t * dec, size_t len);
+void ostoi_C (const uint8_t* to_dec, uint32_t * dec, size_t len);
 
-void fptoos (const fp * to_enc, uint8_t * enc);
+void fptoos_C (const fp * to_enc, uint8_t * enc);
 
-int ostofp (const uint8_t *to_dec, fp * dec);
+int ostofp_C (const uint8_t *to_dec, fp * dec);
 
-void fp2toos(const fp2 * to_enc, uint8_t * enc);
+void fp2toos_C(const fp2 * to_enc, uint8_t * enc);
 
-int ostofp2(const uint8_t *to_dec, fp2 * dec);
+int ostofp2_C(const uint8_t *to_dec, fp2 * dec);
 
-void pktoos(const sike_public_key_t * to_enc, uint8_t * enc);
+void pktoos_C(const sike_public_key_t * to_enc, uint8_t * enc);
 
-int ostopk(const uint8_t *to_dec, sike_public_key_t * dec);
+int ostopk_C(const uint8_t *to_dec, sike_public_key_t * dec);
 
 //
 // FP
 //
 
-fp fp_Add(const fp a, const fp b);
+fp fpAdd_C(const fp a, const fp b);
 
-int fp_Cmp(const fp a, const fp b);
+int fpCmp_C(const fp a, const fp b);
 
-int fp_IsEven(const fp a);
+int fpIsBitSet_C(const fp a, const int i);
 
-fp fp_Invert(const fp a);
+int fpIsEven_C(const fp a);
 
-fp fp_Multiply(const fp a, const fp b);
+fp fpInvert_C(const fp a);
 
-fp fp_Negative(const fp a);
+fp fpMultiply_C(const fp a, const fp b);
 
-fp fp_Pow(const fp a, const fp b);
+fp fpNegative_C(const fp a);
 
-int fp_QuadNonRes(const fp a);
+fp fpPow_C(const fp a, const fp b);
 
-fp fp_Square(const fp a);
+int fpQuadNonRes_C(const fp a);
 
-fp fp_Sqrt(const fp a);
+fp fpSquare_C(const fp a);
 
-fp fp_Subtract(const fp a, const fp b);
+fp fpSqrt_C(const fp a);
 
-fp fp_Unity();
+fp fpSubtract_C(const fp a, const fp b);
 
-fp fp_Zero();
+fp fpUnity_C();
 
-fp fp_Constant(uint32_t a); // NO EQUIV
+fp fpZero_C();
 
-int fp_IsBitSet(const fp a, const int i);
-
-int fp_IsConstant(const fp a, const uint32_t constant);
+fp fpConstant_C(uint32_t a);
 
 //
 // FP2
 //
 
-fp2 fp2_Add(const fp2 a, const fp2 b);
+fp2 mkFP2_C(uint32_t x0, uint32_t x1);
 
-fp2 fp2_Double(const fp2 a);
+fp2 fp2Add_C(const fp2 a, const fp2 b);
 
-int fp2_Cmp(const fp2 a1, const fp2 a2);
+fp2 fp2Double_C(const fp2 a);
 
-fp2 fp2_Subtract(const fp2 a, const fp2 b);
+int fp2Cmp_C(const fp2 a1, const fp2 a2);
 
-fp2 fp2_Multiply(const fp2 a, const fp2 b);
+fp2 fp2Subtract_C(const fp2 a, const fp2 b);
 
-fp2 fp2_Square(const fp2 a);
+fp2 fp2Multiply_C(const fp2 a, const fp2 b);
 
-fp2 fp2_Invert(const fp2 a);
+fp2 fp2Square_C(const fp2 a);
 
-fp2 fp2_Negative(const fp2 a);
+fp2 fp2Invert_C(const fp2 a);
 
-fp2 fp2_Sqrt(const fp2 a);
+fp2 fp2Negative_C(const fp2 a);
 
-fp2 fp2_Unity();
+fp2 fp2Sqrt_C(const fp2 a);
 
-fp2 fp2_Zero();
+fp2 fp2Unity_C();
 
-int fp2_IsConst(const fp2 a, uint32_t x0, uint32_t x1); // NO EQUIV
-
-fp2 mkFP2(uint32_t x0, uint32_t x1);
+fp2 fp2Zero_C();
 
 //
 // MONTGOMERY

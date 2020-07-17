@@ -1,0 +1,174 @@
+import "sidhBits.cry";
+print "\nCryptol loaded successfully.\n";
+
+reference_llvm <- llvm_load_module "sidhBits.bc";
+print "\nByte Code loaded successfully.\n";
+
+//
+// SPECS
+//
+
+//
+// FP
+//
+
+let fpAddSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    b <- crucible_fresh_var "b" (llvm_int 32);
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{fpAdd a b }});
+};
+
+
+let fpCmpSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    b <- crucible_fresh_var "b" (llvm_int 32);
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{ zext`{32} <~ [fpCmp a b] }});
+};
+
+let fpConstantSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    crucible_execute_func [crucible_term a];
+    crucible_return (crucible_term {{fpConstant a }});
+};
+
+let fpNegativeSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    crucible_execute_func [crucible_term a];
+    crucible_return (crucible_term {{fpNegative a }});
+};
+
+let fpUnitySpec = do {
+    crucible_execute_func [];
+    crucible_return (crucible_term {{ fpUnity }});
+};
+
+let fpZeroSpec = do {
+    crucible_execute_func [];
+    crucible_return (crucible_term {{ fpZero }});
+};
+
+let fpMultiplySpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    b <- crucible_fresh_var "b" (llvm_int 32);
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{fpMultiply a b }});
+};
+
+let fpIsBitSetSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    b <- crucible_fresh_var "b" (llvm_int 32);
+    crucible_precond {{b < 32}};
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{ zext`{32} <~ [fpIsBitSet a b] }});
+};
+
+let fpIsEvenSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    crucible_execute_func [crucible_term a];
+    crucible_return (crucible_term {{ zext`{32} <~ [fpIsEven a] }});
+};
+
+let fpSubtractSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    b <- crucible_fresh_var "b" (llvm_int 32);
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{fpSubtract a b }});
+};
+
+let fpSquareSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    crucible_execute_func [crucible_term a];
+    crucible_return (crucible_term {{ fpSquare a }});
+};
+
+let fp2AddSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 64);
+    b <- crucible_fresh_var "b" (llvm_int 64);
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Add (intToExtFP2 a) (intToExtFP2 b) }});
+};
+
+/*
+
+let fpPowSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    b <- crucible_fresh_var "b" (llvm_int 32);
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{fpPow a b }});
+};
+
+let fpInvertSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    crucible_execute_func [crucible_term a];
+    crucible_return (crucible_term {{fpInvert a }});
+};
+
+let fpSqrtSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    crucible_execute_func [crucible_term a];
+    crucible_return (crucible_term {{fpSqrt a }});
+};
+
+let fpQuadNonResSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    crucible_execute_func [crucible_term a];
+    crucible_return (crucible_term {{ zext`{32} <~ [fpQuadNonRes a] }});
+};
+
+*/
+
+//
+// PROOFS
+//
+
+fpAdd_ov <- crucible_llvm_verify reference_llvm "fpAdd_C" [] false fpAddSpec abc;
+print "\nfpAdd proved successfully!\n";
+
+fpCmp_ov <- crucible_llvm_verify reference_llvm "fpCmp_C" [] false fpCmpSpec abc;
+print "\nfpCmp proved successfully!\n";
+
+fpConstant_ov <- crucible_llvm_verify reference_llvm "fpConstant_C" [] false fpConstantSpec abc;
+print "\nfpAdd proved successfully!\n";
+
+fpNegative_ov <- crucible_llvm_verify reference_llvm "fpNegative_C" [] false fpNegativeSpec abc;
+print "\nfpNegative proved successfully!\n";
+
+fpUnity_ov <- crucible_llvm_verify reference_llvm "fpUnity_C" [] false fpUnitySpec abc;
+print "\nfpUnity proved successfully!\n";
+
+fpZero_ov <- crucible_llvm_verify reference_llvm "fpZero_C" [] false fpZeroSpec abc;
+print "\nfpUnity proved successfully!\n";
+
+fpMultiply_ov <- crucible_llvm_verify reference_llvm "fpMultiply_C" [] false fpMultiplySpec abc;
+print "\nfpMultiply proved successfully!\n";
+
+fpIsBitSet_ov <- crucible_llvm_verify reference_llvm "fpIsBitSet_C" [] false fpIsBitSetSpec abc;
+print "\nfpIsBitSet proved successfully!\n";
+
+fpIsEven_ov <- crucible_llvm_verify reference_llvm "fpIsEven_C" [fpIsBitSet_ov] false fpIsEvenSpec abc;
+print "\nfpIsEven proved successfully!\n";
+
+fpSubtract_ov <- crucible_llvm_verify reference_llvm "fpSubtract_C" [fpNegative_ov, fpAdd_ov] false fpSubtractSpec abc;
+print "\nfpSubtract proved successfully!\n";
+
+fpSquare_ov <- crucible_llvm_verify reference_llvm "fpSquare_C" [fpMultiply_ov] false fpSquareSpec abc;
+print "\nfpSquare proved successfully!\n";
+
+fp2Add_ov <- crucible_llvm_verify reference_llvm "fp2Add_C" [] false fp2AddSpec abc;
+print "\nfp2Add proved successfully!\n";
+
+/*
+fpPow_ov <- crucible_llvm_verify reference_llvm "fpPow_C" [fpUnity_ov, fpSquare_ov, fpIsBitSet_ov, fpMultiply_ov] false fpPowSpec abc;
+print "\nfpPow proved successfully!\n";
+
+fpInvert_ov <- crucible_llvm_verify reference_llvm "fpInvert_C" [fpConstant_ov, fpPow_ov] false fpInvertSpec abc;
+print "\nfpInvert proved successfully!\n";
+
+fpSqrt_ov <- crucible_llvm_verify reference_llvm "fpSqrt_C" [fpConstant_ov, fpPow_ov, fpIsEven_ov, fpNegative_ov] false fpSqrtSpec abc;
+print "\nfpSqrt proved successfully!\n";
+
+fpQuadNonRes_ov <- crucible_llvm_verify reference_llvm "fpQuadNonRes_C" [fpSqrt_ov, fpSquare_ov, fpCmp_ov] false fpQuadNonResSpec abc;
+print "\nfpQuadNonRes proved successfully!\n";
+*/

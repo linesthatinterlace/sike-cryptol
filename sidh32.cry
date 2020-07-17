@@ -35,7 +35,14 @@ type Fp = [Np*8]
 type Fp2 = {x0 : Fp, x1 : Fp}
 
 mkFP2 : Fp -> Fp -> Fp2
-mkFP2 x0' x1' = {x0 = x0', x1 = x1'}
+mkFP2 x0' x1' = {x0 = x0' % modulus, x1 = x1' % modulus}
+
+intToExtFP2 : [64] -> Fp2
+intToExtFP2 x = mkFP2 x0 x1
+    where [x0, x1] = split`{2} x
+
+extToIntFP2 : Fp2 -> [64]
+extToIntFP2 z = z.x0 # z.x1
 
 type EllipticPoint = {x: Fp2, y: Fp2}
 
@@ -122,8 +129,8 @@ ostopk os = (mkPublicKey xP xQ xR, pP /\ pQ /\ pR)
 /// Parameters
 ///
 
-paramSet : SikeParamsRaw
-paramSet = { cA1 = 0x00000006, cA2 = 0x00000000, cB1 = 0x00000001, cB2 = 0x00000000,
+sikeRawParams : SikeParamsRaw
+sikeRawParams = { cA1 = 0x00000006, cA2 = 0x00000000, cB1 = 0x00000001, cB2 = 0x00000000,
  xp21 = 0x0a7e21eb, xp22 = 0x09ab3afb, yp21 = 0x0366529e, yp22 = 0x00615a32,
  xq21 = 0x09875b2b, xq22 = 0x076a3372, yq21 = 0x00216b6b, yq22 = 0x0b6465ec,
  xp31 = 0x09aa9e25, xp32 = 0x00000000, yp31 = 0x040d8353, yp32 = 0x00000000,
@@ -170,6 +177,11 @@ fpNegative a = if r == fpZero then fpZero else modulus - r
 fpPow : Fp -> Fp -> Fp
 fpPow a n = bs ! 0
     where   bs = [fpUnity] # [ if bit then fpMultiply a (fpSquare b) else fpSquare b | b <- bs | bit <- n ]
+
+x_fpPow : Fp -> Fp
+x_fpPow a = bs ! 0
+    where   bs = [fpUnity] # [ if bit then fpMultiply a (fpSquare (loud b)) else fpSquare b | b <- bs | bit <- (fromInteger 3) : [32] ]
+
 
 fpQuadNonRes : Fp -> Bit
 fpQuadNonRes a = ~(fpCmp (fpSquare r) a)
@@ -718,11 +730,11 @@ isoex_3 pk2 sk3 = j3
 
 gen3ex2 : SecretKeyTwo -> SecretKeyThree -> Fp2
 gen3ex2 sk2 sk3 = isoex_2 (isogen_3 params sk3) sk2
-    where params = mkSikeParams paramSet
+    where params = mkSikeParams sikeRawParams
 
 gen2ex3 : SecretKeyTwo -> SecretKeyThree -> Fp2
 gen2ex3 sk2 sk3 = isoex_3 (isogen_2 params sk2) sk3
-    where params = mkSikeParams paramSet
+    where params = mkSikeParams sikeRawParams
 
 property secretShared a b = gen3ex2 a b == gen2ex3 a b
 
