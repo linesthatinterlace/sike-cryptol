@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 // PARAMS
 
@@ -113,8 +114,6 @@ fp fpAdd_C(const fp a, const fp b) {
   return (uint32_t)(((uint64_t)a + (uint64_t)b) % (uint64_t)MODULUS);
 }
 
-fp fpConstant_C(uint32_t a) { return a % MODULUS; }
-
 int fpCmp_C(const fp a, const fp b) {
   return (a % MODULUS) == (b % MODULUS);
 }
@@ -152,25 +151,8 @@ fp fpPow_C(const fp a, const fp b) {
 
 fp fpInvert_C(const fp a) {
   fp t1;
-  t1 = fpConstant_C(MODULUS - 2);
+  t1 = MODULUS - 2;
   return fpPow_C(a, t1);
-}
-
-int fpQuadNonRes_C(const fp a) {
-  fp t1;
-  t1 = fpSqrt_C(a);
-  t1 = fpSquare_C(t1);
-  return !fpCmp_C(a, t1);
-}
-
-fp fpSqrt_C(const fp a) {
-  fp t1, p14;
-  p14 = fpConstant_C((MODULUS + 1) >> 2);
-  t1 = fpPow_C(a, p14);
-  if (!fpIsEven_C(t1)) {
-    t1 = fpNegative_C(t1);
-  }
-  return t1;
 }
 
 fp fpSubtract_C(const fp a, const fp b) {
@@ -179,27 +161,22 @@ fp fpSubtract_C(const fp a, const fp b) {
   return fpAdd_C(a, t1);
 }
 
-fp fpUnity_C() { return fpConstant_C(1); }
+fp fpUnity_C() { return 1; }
 
-fp fpZero_C() { return fpConstant_C(0); }
+fp fpZero_C() { return 0; }
 
 
 // FP2
 
 fp2 mkFP2_C(const fp x0, const fp x1) {
-  fp2 z = { 0 };
-  z.x0 = fpConstant_C(x0);
-  z.x1 = fpConstant_C(x1);
+  fp2 z = { .x0 = x0, .x1 = x1 };
   return z;
 }
 
 fp2 fp2Add_C(const fp2 a, const fp2 b) {
-  fp x0, x1;
   fp2 z = { 0 };
-  x0 = fpAdd_C(a.x0, b.x0);
-  x1 = fpAdd_C(a.x1, b.x1);
-  
-  z = mkFP2_C(x0, x1);
+  z.x0 = fpAdd_C(a.x0, b.x0);
+  z.x1 = fpAdd_C(a.x1, b.x1);
   return z;
 }
 
@@ -213,8 +190,7 @@ int fp2Cmp_C(const fp2 a1, const fp2 a2) {
 
 fp2 fp2Subtract_C(const fp2 a, const fp2 b) {
   fp2 z = { 0 };
-  z.x0 = fpSubtract_C(a.x0, b.x0);
-  z.x1 = fpSubtract_C(a.x1, b.x1);
+  z = fp2Add_C(a, fp2Negative_C(b));
   return z;
 }
 
@@ -267,51 +243,44 @@ fp2 fp2Negative_C(const fp2 a) {
 }
 
 fp2 fp2Sqrt_C(const fp2 a) {
-  fp t0, t1, x0, x1;
+  fp t0, t1, t2, t3, p14, x0, x1, inv2;
   fp2 z = { 0 };
-  if ((fpCmp_C(a.x1, 0)) && (fpQuadNonRes_C(a.x0))) {
-    x0 = fpZero_C();
-    x1 = fpSqrt_C(a.x0);
-  } else {
-    fp t2, t3, p14, p34, inv2;
-    inv2 = fpConstant_C(2);
-
-    // (p + 1) / 4
-    p14 = fpConstant_C((MODULUS + 1) >> 2);
-
-    // (p - 3) / 4
-    p34 = fpConstant_C((MODULUS - 3) >> 2);
-
-    inv2 = fpInvert_C(inv2);
-    t0 = fpSquare_C(a.x0);
-    t1 = fpSquare_C(a.x1);
-    t0 = fpAdd_C(t0, t1);
-    t1 = fpPow_C(t0, p14);
-    t0 = fpAdd_C(a.x0, t1);
-    t0 = fpMultiply_C(t0, inv2);
-
-    t2 = fpPow_C(t0, p34);
-
-    t1 = fpPow_C(t0, p14);
-    t2 = fpMultiply_C(t2, a.x1);
-    t2 = fpMultiply_C(t2, inv2);
-
-    t3 = fpSquare_C(t1);
-    if (!fpCmp_C(t3, t0)) {
-      t0 = t1;
-      t1 = t2;
-      t2 = fpNegative_C(t0);
-    }
-    if (fpIsEven_C(t1)) {
-      x0 = t1;
-      x1 = t2;
-    } else {
-      x0 = fpNegative_C(t1);
-      x1 = fpNegative_C(t2);
-    }
-  }
-  z = mkFP2_C(x0, x1);
   
+  inv2 = 2;
+
+  // (p + 1) / 4
+  p14 = (MODULUS + 1) >> 2;
+
+  t0 = fpSquare_C(a.x0);
+  t1 = fpSquare_C(a.x1);
+  t1 = fpAdd_C(t0, t1);
+  t1 = fpPow_C(t1, p14);
+  t0 = fpAdd_C(a.x0, t1);
+  if ( fpCmp_C(t0, fpZero_C()) ) {
+    t1 = fpAdd_C(t1, t1);
+    t0 = fpSubtract_C(t0, t1); 
+  }  
+  inv2 = fpInvert_C(inv2);
+  t0 = fpMultiply_C(t0, inv2); // u
+  t1 = fpPow_C(t0, p14);
+  t2 = fpInvert_C(t1);
+  t2 = fpMultiply_C(t2, a.x1);
+  t2 = fpMultiply_C(t2, inv2);
+  t3 = fpSquare_C(t1);
+  if ( !fpCmp_C(t3, t0) ) {
+    t3 = t2;
+    t2 = t1;
+    t1 = t3;
+  }
+  if ( (!fpIsEven_C(t1)) || ( (fpCmp_C(t1, fpZero_C())) && (!fpIsEven_C(t2)) ) ) {
+    x0 = fpNegative_C(t1);
+    x1 = fpNegative_C(t2);
+  } else {
+    x0 = t1;
+    x1 = t2;
+  }
+  z.x0 = x0;
+  z.x1 = x1;
   return z;
 }
 
@@ -343,7 +312,7 @@ mont_pt_t mont_inf_affine() {
 
 // returns 1 for True, 0 for False 
 int mont_is_inf_affine(const mont_pt_t P) {
-  return (fp2Cmp_C(P.x, fp2Zero_C())) && (fp2Cmp_C(P.y, fp2Unity_C()));
+  return (fp2Cmp_C(P.x, mont_inf_affine().x)) && (fp2Cmp_C(P.y, mont_inf_affine().y));
 }
 
 mont_pt_t mont_double_and_add(const mont_curve_int_t curve, const fp k, const mont_pt_t P, uint16_t msb) {
@@ -917,7 +886,6 @@ mont_curve_int_t get_yP_yQ_A_B(const sike_public_key_t pk) {
   t1 = fp2Add_C(t2, t1);      // t1 = xP^3+a*xP^2
   t1 = fp2Add_C(t1, xP);      // t1 = xP^3+a*xP^2+xP
   P.y = fp2Sqrt_C(t1);      // yP = sqrt(xP^3+a*xP^2+xP)
-
   t1 = fp2Square_C(xQ);       // t1 = xQ^2
   t2 = fp2Multiply_C(xQ, t1); // t2 = xQ^3
   t1 = fp2Multiply_C(a, t1);  // t1 = a*xQ^2
@@ -1109,22 +1077,27 @@ int secretShared(sike_private_key_2 a, sike_private_key_2 b) {
 int main(int argc, char *argv[]) {
   sike_private_key_2 skA;
   sike_private_key_3 skB;
+  time_t t;
+  srand((unsigned) time(&t));
   if (argc == 1) {
-    skA = 0;
-    skB = 0;
+    skA = rand();
+    skB = rand();
   }
   else {
     skA = (uint16_t)strtol(argv[1], NULL, 10); // Range here is 0 to 32767.
     if (argc == 2) {
-      skB = 0;
+      skB = rand();
     }
     else {
       skB = (uint16_t)strtol(argv[2], NULL, 10);   // Range here is 0 to 6560, although in practice it's 0 to 4095.
     }
   }
+  printf("skA: %d, skB: %d\n", skA, skB);
   fp2 c = gen2ex3(skA, skB);
+  printf("gen2ex3: ");
   printFP2(c);
+  printf("gen3ex2: ");
   fp2 d = gen3ex2(skA, skB);
   printFP2(d);
-  return fp2Cmp_C(c, d);
+  return !fp2Cmp_C(c, d);
 }

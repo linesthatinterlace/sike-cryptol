@@ -14,7 +14,7 @@ import lib::DRBG
 // Parameters
 //
 
-xR20
+parameter
     type p  : # // p must be of the form 2^(e2)3^(e3) - 1
     type constraint (fin p, p % 4 == 3, p>=7)
     type e2 : #

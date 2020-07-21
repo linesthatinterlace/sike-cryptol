@@ -142,19 +142,13 @@ fp fpNegative_C(const fp a);
 
 fp fpPow_C(const fp a, const fp b);
 
-int fpQuadNonRes_C(const fp a);
-
 fp fpSquare_C(const fp a);
-
-fp fpSqrt_C(const fp a);
 
 fp fpSubtract_C(const fp a, const fp b);
 
 fp fpUnity_C();
 
 fp fpZero_C();
-
-fp fpConstant_C(uint32_t a);
 
 //
 // FP2

@@ -1,8 +1,20 @@
-import "sidhBits.cry";
+import "sidh32.cry";
 print "\nCryptol loaded successfully.\n";
 
-reference_llvm <- llvm_load_module "sidhBits.bc";
+reference_llvm <- llvm_load_module "sidh32.bc";
 print "\nByte Code loaded successfully.\n";
+
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty (crucible_term x);
+    return (x, p);
+};
 
 //
 // SPECS
@@ -25,12 +37,6 @@ let fpCmpSpec = do {
     b <- crucible_fresh_var "b" (llvm_int 32);
     crucible_execute_func [crucible_term a, crucible_term b];
     crucible_return (crucible_term {{ zext`{32} <~ [fpCmp a b] }});
-};
-
-let fpConstantSpec = do {
-    a <- crucible_fresh_var "a" (llvm_int 32);
-    crucible_execute_func [crucible_term a];
-    crucible_return (crucible_term {{fpConstant a }});
 };
 
 let fpNegativeSpec = do {
@@ -83,15 +89,6 @@ let fpSquareSpec = do {
     crucible_return (crucible_term {{ fpSquare a }});
 };
 
-let fp2AddSpec = do {
-    a <- crucible_fresh_var "a" (llvm_int 64);
-    b <- crucible_fresh_var "b" (llvm_int 64);
-    crucible_execute_func [crucible_term a, crucible_term b];
-    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Add (intToExtFP2 a) (intToExtFP2 b) }});
-};
-
-/*
-
 let fpPowSpec = do {
     a <- crucible_fresh_var "a" (llvm_int 32);
     b <- crucible_fresh_var "b" (llvm_int 32);
@@ -105,17 +102,114 @@ let fpInvertSpec = do {
     crucible_return (crucible_term {{fpInvert a }});
 };
 
-let fpSqrtSpec = do {
+let mkFP2Spec = do {
     a <- crucible_fresh_var "a" (llvm_int 32);
-    crucible_execute_func [crucible_term a];
-    crucible_return (crucible_term {{fpSqrt a }});
+    b <- crucible_fresh_var "b" (llvm_int 32);
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{ extToIntFP2 <~ mkFP2 a b }});
 };
 
-let fpQuadNonResSpec = do {
-    a <- crucible_fresh_var "a" (llvm_int 32);
-    crucible_execute_func [crucible_term a];
-    crucible_return (crucible_term {{ zext`{32} <~ [fpQuadNonRes a] }});
+let fp2AddSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 64);
+    b <- crucible_fresh_var "b" (llvm_int 64);
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Add (intToExtFP2 a) (intToExtFP2 b) }});
 };
+
+let fp2DoubleSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 64);
+    crucible_execute_func [crucible_term a, crucible_term a];
+    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Double (intToExtFP2 a) }});
+};
+
+let fp2CmpSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 64);
+    b <- crucible_fresh_var "b" (llvm_int 64);
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{ zext`{32} <~ [fp2Cmp (intToExtFP2 a) (intToExtFP2 b)] }});
+};
+
+let fp2NegativeSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 64);
+    crucible_execute_func [crucible_term a, crucible_term a];
+    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Negative (intToExtFP2 a) }});
+};
+
+let fp2SubtractSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 64);
+    b <- crucible_fresh_var "b" (llvm_int 64);
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Subtract (intToExtFP2 a) (intToExtFP2 b) }});
+};
+
+let fp2MultiplySpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 64);
+    b <- crucible_fresh_var "b" (llvm_int 64);
+    crucible_execute_func [crucible_term a, crucible_term b];
+    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Multiply (intToExtFP2 a) (intToExtFP2 b) }});
+};
+
+let fp2SquareSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 64);
+    crucible_execute_func [crucible_term a, crucible_term a];
+    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Square (intToExtFP2 a) }});
+};
+
+let fp2InvertSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 64);
+    crucible_execute_func [crucible_term a, crucible_term a];
+    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Invert (intToExtFP2 a) }});
+};
+
+let fp2NegativeSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 64);
+    crucible_execute_func [crucible_term a, crucible_term a];
+    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Negative (intToExtFP2 a) }});
+};
+
+let fp2UnitySpec = do {
+    crucible_execute_func [];
+    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Unity }});
+};
+
+let fp2ZeroSpec = do {
+    crucible_execute_func [];
+    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Zero }});
+};
+
+let fp2SqrtSpec = do {
+    a <- crucible_fresh_var "a" (llvm_int 64);
+    crucible_execute_func [crucible_term a, crucible_term a];
+    crucible_return (crucible_term {{ extToIntFP2 <~ fp2Sqrt (intToExtFP2 a) }});
+};
+
+/*
+
+mont_pt_t mont_double_and_add(const mont_curve_int_t curve, const fp k, const mont_pt_t P, uint16_t msb);
+                         
+mont_pt_t mont_inf_affine();
+
+int mont_is_inf_affine(const mont_pt_t P);
+
+mont_pt_t xDBL(const mont_curve_int_t curve, const mont_pt_t P);
+
+mont_pt_t xDBLe(const mont_curve_int_t curve, const mont_pt_t P, int e);
+
+mont_pt_t xADD(const mont_curve_int_t curve, const mont_pt_t P, const mont_pt_t Q);
+
+mont_pt_t xTPL(const mont_curve_int_t curve, const mont_pt_t P);
+
+mont_pt_t xTPLe(const mont_curve_int_t curve, const mont_pt_t P, int e);
+
+mont_pt_t xNEGATE(const mont_pt_t P);
+
+fp2 j_inv(const mont_curve_int_t E);
+
+mont_pt_t mkPoint(const fp2 x, const fp2 y); 
+
+mont_curve_int_t mkMC(const fp2 a, const fp2 b, const mont_pt_t P, const mont_pt_t Q); 
+
+
 
 */
 
@@ -123,14 +217,11 @@ let fpQuadNonResSpec = do {
 // PROOFS
 //
 
-fpAdd_ov <- crucible_llvm_verify reference_llvm "fpAdd_C" [] false fpAddSpec abc;
+fpAdd_ov <- crucible_llvm_verify reference_llvm "fpAdd_C" [] false fpAddSpec yices;
 print "\nfpAdd proved successfully!\n";
 
 fpCmp_ov <- crucible_llvm_verify reference_llvm "fpCmp_C" [] false fpCmpSpec abc;
 print "\nfpCmp proved successfully!\n";
-
-fpConstant_ov <- crucible_llvm_verify reference_llvm "fpConstant_C" [] false fpConstantSpec abc;
-print "\nfpAdd proved successfully!\n";
 
 fpNegative_ov <- crucible_llvm_verify reference_llvm "fpNegative_C" [] false fpNegativeSpec abc;
 print "\nfpNegative proved successfully!\n";
@@ -139,7 +230,7 @@ fpUnity_ov <- crucible_llvm_verify reference_llvm "fpUnity_C" [] false fpUnitySp
 print "\nfpUnity proved successfully!\n";
 
 fpZero_ov <- crucible_llvm_verify reference_llvm "fpZero_C" [] false fpZeroSpec abc;
-print "\nfpUnity proved successfully!\n";
+print "\nfpZero proved successfully!\n";
 
 fpMultiply_ov <- crucible_llvm_verify reference_llvm "fpMultiply_C" [] false fpMultiplySpec abc;
 print "\nfpMultiply proved successfully!\n";
@@ -156,19 +247,54 @@ print "\nfpSubtract proved successfully!\n";
 fpSquare_ov <- crucible_llvm_verify reference_llvm "fpSquare_C" [fpMultiply_ov] false fpSquareSpec abc;
 print "\nfpSquare proved successfully!\n";
 
-fp2Add_ov <- crucible_llvm_verify reference_llvm "fp2Add_C" [] false fp2AddSpec abc;
-print "\nfp2Add proved successfully!\n";
-
-/*
-fpPow_ov <- crucible_llvm_verify reference_llvm "fpPow_C" [fpUnity_ov, fpSquare_ov, fpIsBitSet_ov, fpMultiply_ov] false fpPowSpec abc;
+fpPow_ov <- crucible_llvm_verify reference_llvm "fpPow_C" [fpUnity_ov, fpSquare_ov, fpIsBitSet_ov, fpMultiply_ov] false fpPowSpec assume_unsat;
 print "\nfpPow proved successfully!\n";
 
-fpInvert_ov <- crucible_llvm_verify reference_llvm "fpInvert_C" [fpConstant_ov, fpPow_ov] false fpInvertSpec abc;
+fpInvert_ov <- crucible_llvm_verify reference_llvm "fpInvert_C" [fpPow_ov] false fpInvertSpec assume_unsat;
 print "\nfpInvert proved successfully!\n";
 
-fpSqrt_ov <- crucible_llvm_verify reference_llvm "fpSqrt_C" [fpConstant_ov, fpPow_ov, fpIsEven_ov, fpNegative_ov] false fpSqrtSpec abc;
-print "\nfpSqrt proved successfully!\n";
+mkFP2_ov <- crucible_llvm_verify reference_llvm "mkFP2_C" [] false mkFP2Spec abc;
+print "\nmkFP2 proved successfully!\n";
 
-fpQuadNonRes_ov <- crucible_llvm_verify reference_llvm "fpQuadNonRes_C" [fpSqrt_ov, fpSquare_ov, fpCmp_ov] false fpQuadNonResSpec abc;
-print "\nfpQuadNonRes proved successfully!\n";
+fp2Add_ov <- crucible_llvm_verify reference_llvm "fp2Add_C" [fpAdd_ov] false fp2AddSpec abc;
+print "\nfp2Add proved successfully!\n";
+
+fp2Double_ov <- crucible_llvm_verify reference_llvm "fp2Double_C" [fpAdd_ov] false fp2DoubleSpec abc;
+print "\nfp2Double proved successfully!\n";
+
+fp2Negative_ov <- crucible_llvm_verify reference_llvm "fp2Negative_C" [fpAdd_ov] false fp2NegativeSpec abc;
+print "\nfp2Negative proved successfully!\n";
+
+fp2Cmp_ov <- crucible_llvm_verify reference_llvm "fp2Cmp_C" [fpCmp_ov] false fp2CmpSpec abc;
+print "\nfp2Cmp proved successfully!\n";
+
+fp2Subtract_ov <- crucible_llvm_verify reference_llvm "fp2Subtract_C" [fp2Add_ov, fp2Negative_ov] false fp2SubtractSpec abc;
+print "\nfp2Subtract proved successfully!\n";
+
+fp2Multiply_ov <- crucible_llvm_verify reference_llvm "fp2Multiply_C" [fpMultiply_ov, fpSubtract_ov, fpAdd_ov] false fp2MultiplySpec abc;
+print "\nfp2Multiply proved successfully!\n";
+
+fp2Square_ov <- crucible_llvm_verify reference_llvm "fp2Square_C" [fp2Multiply_ov] false fp2SquareSpec abc;
+print "\nfp2Square proved successfully!\n";
+
+fp2Invert_ov <- crucible_llvm_verify reference_llvm "fp2Invert_C" [fpSquare_ov, fpAdd_ov, fpInvert_ov, fpNegative_ov, fpMultiply_ov] false fp2InvertSpec assume_unsat;
+print "\nfp2Invert proved successfully!\n";
+
+fp2Negative_ov <- crucible_llvm_verify reference_llvm "fp2Negative_C" [fpNegative_ov] false fp2NegativeSpec abc;
+print "\nfp2Negative proved successfully!\n";
+
+fp2Unity_ov <- crucible_llvm_verify reference_llvm "fp2Unity_C" [] false fp2UnitySpec abc;
+print "\nfp2Unity proved successfully!\n";
+
+fp2Zero_ov <- crucible_llvm_verify reference_llvm "fp2Zero_C" [] false fp2ZeroSpec abc;
+print "\nfp2Zero proved successfully!\n";
+
+fp2Sqrt_ov <- crucible_llvm_verify reference_llvm "fp2Sqrt_C" [fpCmp_ov, fpZero_ov, fpInvert_ov, fpSquare_ov, fpAdd_ov, fpPow_ov, fpMultiply_ov, fpIsEven_ov, fpNegative_ov] false fp2SqrtSpec abc;
+print "\nfp2Sqrt proved successfully!\n";
+
+/*
+
+
+
+
 */

@@ -35,14 +35,14 @@ type Fp = [Np*8]
 type Fp2 = {x0 : Fp, x1 : Fp}
 
 mkFP2 : Fp -> Fp -> Fp2
-mkFP2 x0' x1' = {x0 = x0' % modulus, x1 = x1' % modulus}
+mkFP2 x0' x1' = {x0 = x0', x1 = x1'}
 
 intToExtFP2 : [64] -> Fp2
 intToExtFP2 x = mkFP2 x0 x1
-    where [x0, x1] = split`{2} x
+    where [x1, x0] = split`{2} x
 
 extToIntFP2 : Fp2 -> [64]
-extToIntFP2 z = z.x0 # z.x1
+extToIntFP2 z = z.x1 # z.x0
 
 type EllipticPoint = {x: Fp2, y: Fp2}
 
@@ -178,23 +178,8 @@ fpPow : Fp -> Fp -> Fp
 fpPow a n = bs ! 0
     where   bs = [fpUnity] # [ if bit then fpMultiply a (fpSquare b) else fpSquare b | b <- bs | bit <- n ]
 
-x_fpPow : Fp -> Fp
-x_fpPow a = bs ! 0
-    where   bs = [fpUnity] # [ if bit then fpMultiply a (fpSquare (loud b)) else fpSquare b | b <- bs | bit <- (fromInteger 3) : [32] ]
-
-
-fpQuadNonRes : Fp -> Bit
-fpQuadNonRes a = ~(fpCmp (fpSquare r) a)
-    where r   = fpPow a ( modulus + 1 >> 2 )
-
 fpSquare : Fp -> Fp
 fpSquare a = fpMultiply a a
-                
-fpSqrt : Fp -> Fp
-fpSqrt a =  if fpIsEven r
-            then r
-            else fpNegative r
-            where   r   = fpPow a ( modulus + 1 >> 2 )
 
 fpSubtract : Fp -> Fp -> Fp
 fpSubtract a b = fpAdd a (fpNegative b)
@@ -226,41 +211,55 @@ fp2Subtract : Fp2 -> Fp2 -> Fp2
 fp2Subtract a b = fp2Add a (fp2Negative b)
 
 fp2Multiply : Fp2 -> Fp2 -> Fp2
-fp2Multiply a b = mkFP2 (fpSubtract (fpMultiply a.x0 b.x0) (fpMultiply a.x1 b.x1)) (fpAdd (fpMultiply a.x0 b.x1) (fpMultiply a.x1 b.x0))
+fp2Multiply a b = mkFP2 x0 x1
+    where   mul0    = fpMultiply a.x0 b.x0
+            mul1    = fpMultiply a.x1 b.x1
+            adda    = fpAdd a.x0 a.x1
+            addb    = fpAdd b.x0 b.x1
+            x0      = fpSubtract mul0 mul1
+            mul0'   = fpAdd mul0 mul1
+            mul1'   = fpMultiply adda addb
+            x1      = fpSubtract mul1' mul0'
 
 fp2Square : Fp2 -> Fp2
 fp2Square a = fp2Multiply a a
 
 fp2Invert : Fp2 -> Fp2
-fp2Invert a =  mkFP2 t0 t1
-    where   norm = fpAdd (fpMultiply a.x0 a.x0) (fpMultiply a.x1 a.x1)
-            normInv = fpInvert norm
-            t0 = fpMultiply a.x0 normInv
-            t1 = fpMultiply (fpNegative a.x1) normInv
-
+fp2Invert a =   mkFP2 x0 x1
+        where   mul0    = fpMultiply a.x0 a.x0
+                mul1    = fpMultiply a.x1 a.x1
+                mul0'   = fpAdd mul0 mul1
+                mul0''  = fpInvert mul0'
+                mul1'   = fpNegative a.x1
+                x0 = fpMultiply a.x0 mul0''
+                x1 = fpMultiply mul1' mul0''
+            
 fp2Negative : Fp2 -> Fp2
 fp2Negative a = mkFP2 (fpNegative a.x0) (fpNegative a.x1)
 
 fp2Sqrt : Fp2 -> Fp2
-fp2Sqrt a = if      fpCmp a.x1 fpZero
-            then    if      fpQuadNonRes (a.x0)
-                    then    mkFP2 (fpZero) (fpSqrt (fpNegative a.x0))
-                    else    mkFP2 (fpSqrt a.x0) (fpZero)
-            else    if      (fpIsEven t.x0)
-                    then    fp2Negative t
-                    else    t
-            where   t               =   if fpQuadNonRes z
-                                        then mkFP2 beta' (fpNegative alpha')
-                                        else mkFP2 alpha' beta'
-                    inv2            =   fpInvert 2
-                    fp2Norm         =   fpAdd (fpMultiply a.x0 a.x0) (fpMultiply a.x1 a.x1)
-                    z               =   fpMultiply (fpAdd a.x0 ( fpSqrt fp2Norm ) ) inv2
-                    alpha'          =   fpPow z ( modulus + 1 >> 2 )
-                    beta'           =   fpMultiply (fpMultiply a.x1 (fpPow z ( modulus - 3 >> 2 )) ) inv2
+fp2Sqrt a = mkFP2 x0 x1
+                where   t0          = fpSquare a.x0
+                        t1          = fpSquare a.x1
+                        t2          = fpAdd t0 t1
+                        p14         = modulus + 1 >> 2 
+                        t3          = fpPow t2 p14
+                        t4          = fpAdd a.x0 t3
+                        t5          = if (fpCmp t4 fpZero) then fpSubtract t4 (fpAdd t3 t3) else t4
+                        t6          = fpInvert 2
+                        t7          = fpMultiply t5 t6
+                        t8          = fpPow t7 p14
+                        t9          = fpInvert t8
+                        t10         = fpMultiply t9 a.x1
+                        t11         = fpMultiply t10 t6
+                        (t12, t13)  = if fpCmp (fpSquare t8) t7 then (t8, t11) else (t11, t8)
+                        (x0, x1)    = if (~fpIsEven t12) \/ ( (fpCmp t12 fpZero) /\ (~fpIsEven t13) ) then (fpNegative t12, fpNegative t13) else (t12, t13)
 
 fp2Unity : Fp2
 fp2Unity = mkFP2 fpUnity fpZero
 
+fp2Zero : Fp2
+fp2Zero = mkFP2 fpZero fpZero
 
 ///
 /// Curve Operations
@@ -271,7 +270,7 @@ fp2Unity = mkFP2 fpUnity fpZero
 //
 
 pointAtInfinity : EllipticPoint
-pointAtInfinity = mkPoint (mkFP2 0 0) (mkFP2 1 0)
+pointAtInfinity = mkPoint fp2Zero fp2Unity
 
 isInfinite : EllipticPoint -> Bit
 isInfinite P = (fp2Cmp P.x pointAtInfinity.x) /\ (fp2Cmp P.y pointAtInfinity.y)
